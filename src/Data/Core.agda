@@ -10,7 +10,7 @@ open import Relation.Nullary
 ------------------------------------------------------------------------
 -- Definitions
 
-module Graph (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
+module Data.Core (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
     (N : Set) (zero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
 
 record Graph : Set where
@@ -92,11 +92,3 @@ addEdge e g with findVtx g (src e) | findVtx g (dst e)
 
 -- isFinite : Graph → Set
 
-------------------------------------------------------------------------
--- Graph algorithms
-
-dfs : List A → Graph → List A
-dfs []       g = []
-dfs (v ∷ vs) g with findVtx g v
-... | true  = {!   !}
-... | false = dfs vs g

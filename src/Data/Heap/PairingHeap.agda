@@ -11,7 +11,7 @@ open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 ------------------------------------------------------------------------
 -- Definitions
 
-module PairingHeap 
+module Data.Heap.PairingHeap
     (A : Set)
     (_≤_ : A → A → Set)
     (cmp : (x y : A) → x ≤ y ⊎ y ≤ x)
