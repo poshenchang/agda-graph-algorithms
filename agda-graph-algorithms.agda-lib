@@ -1,0 +1,3 @@
+name: agda-graph-algorithms
+include: src
+depend: standard-library

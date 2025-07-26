@@ -1,0 +1,11 @@
+# Agda specific
+*.agdai
+MAlonzo/**
+_build/**
+.agda-lib
+
+# Editor specific
+*~
+\#*\#
+.\#*
+.vscode/
