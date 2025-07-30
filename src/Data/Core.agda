@@ -1,94 +1,91 @@
 {-# OPTIONS --guardedness #-}
 
-open import Data.Bool
-open import Data.List
+open import Data.Empty using (⊥; ⊥-elim)
+open import Data.Nat using (ℕ; suc; zero; pred)
+open import Data.Fin renaming (_≟_ to _fin≟_)
+open import Data.Unit
+open import Data.List as List
+open import Data.Vec as Vec
+open import Data.Vec.Membership.Propositional
+open import Data.Vec.Relation.Unary.All
+open import Data.Vec.Relation.Unary.AllPairs.Core
+open import Data.Vec.Relation.Unary.Unique.Propositional hiding (_∷_; [])
+open import Data.Vec.Relation.Unary.Unique.Setoid as Setoid hiding (_∷_; []; Unique)
 open import Data.Product
-open import Data.Maybe
 open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary
+open import Function
 
 ------------------------------------------------------------------------
 -- Definitions
 
-module Data.Core (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
-    (N : Set) (zero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
+module Data.Core (A : Set)
+    (N : Set) (Nzero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
 
-record Graph : Set where
-  coinductive
-  field
-    findVtx  : A → Bool
-    inEdges  : A → List (A × N)
-    outEdges : A → List (A × N)
-    delVtx   : A → Graph
+-- 'r' for recursive
 
-open Graph
+rremove : ∀ {n} → Vec A (suc n) → Fin (suc n) → Vec A n
+rremove         (v ∷ vs)  Fin.zero   = vs
+rremove {suc n} (v ∷ vs) (Fin.suc i) = v ∷ rremove vs i
 
-empty : Graph
-findVtx  empty _ = false
-inEdges  empty _ = []
-outEdges empty _ = []
-delVtx   empty _ = empty
+rremove-∉ : ∀ {n} {v : A} {vs : Vec A (suc n)} {i : Fin (suc n)} 
+            → All (_≢_ v) vs → All (_≢_ v) (rremove vs i)
+rremove-∉         {vs = _ ∷ vs} {i = Fin.zero}  (_   ∷ v∉vs) = v∉vs
+rremove-∉ {suc n} {vs = x ∷ vs} {i = Fin.suc i} (v≢x ∷ v∉vs) = v≢x ∷ rremove-∉ v∉vs
+
+mutual
+  Graph : (n : ℕ) → (vs : Vec A n) → Set
+  Graph 0 [] = ⊤
+  Graph (suc n) vs = nonEmptyGraph n vs
+
+  record nonEmptyGraph (n : ℕ) (vs : Vec A (suc n)): Set where
+    coinductive
+    field
+      inEdges  : Fin (suc n) → List (Fin (suc n) × N)
+      outEdges : Fin (suc n) → List (Fin (suc n) × N)
+      delVtx   : (i : Fin (suc n)) → Graph n (rremove vs i)
+      unique-vs : Unique vs
+
+open nonEmptyGraph
 
 ------------------------------------------------------------------------
--- Graph construction
+-- Graph operations
 
 -- efficiency of graph operations largely depends on the construction 
 -- of the graph
 
-addVtx : A → Graph → Maybe Graph
-addVtx v g with findVtx g v
-... | true  = nothing
-... | false = just (addVtxHelper v g)
+addVtx : ∀ {n vs} (v : A) (g : Graph n vs) (v∉g : All (v ≢_) vs) → Graph (suc n) (v ∷ vs)
+addVtx {zero} {[]} v ⊤ _ = ( record
+   { inEdges   = const [] ; 
+     outEdges  = const [] ; 
+     delVtx    = λ {Fin.zero → ⊤} ; 
+     unique-vs = [] ∷ [] })
+addVtx {suc n} {vs} v g v∉g = g'
   where
-    addVtxHelper : A → Graph → Graph
-    findVtx  (addVtxHelper v g) u with eq? u v 
-    ... | yes _ = true
-    ... | no  _ = findVtx g u
-    inEdges  (addVtxHelper v g) u with eq? u v
-    ... | yes _ = []
-    ... | no  _ = inEdges g u
-    outEdges (addVtxHelper v g) u with eq? u v
-    ... | yes _ = []
-    ... | no  _ = outEdges g u
-    delVtx   (addVtxHelper v g) u with eq? u v
-    ... | yes _ = g
-    ... | no  _ = addVtxHelper v (delVtx g u)
+    g' : Graph (suc (suc n)) (v ∷ vs)
+    inEdges   g'  Fin.zero   = []
+    inEdges   g' (Fin.suc i) = List.map (λ {(j , w) → Fin.suc j , w}) (inEdges g i)
+    outEdges  g'  Fin.zero   = []
+    outEdges  g' (Fin.suc i) = List.map (λ {(j , w) → Fin.suc j , w}) (outEdges g i)
+    delVtx    g'  Fin.zero   = g
+    delVtx    g' (Fin.suc i) = addVtx v (delVtx g i) (rremove-∉ v∉g)
+    unique-vs g'             = v∉g ∷ unique-vs g
 
-record Edge : Set where
-  field
-    src : A
-    dst : A
-    weight : N
-
-open Edge
-
-addEdge : Edge → Graph → Maybe Graph
-addEdge e g with findVtx g (src e) | findVtx g (dst e)
-... | false | _     = nothing
-... | true  | false = nothing
-... | true  | true  = just (addEdgeHelper e g)
-  where
-    addEdgeHelper : Edge → Graph → Graph
-    findVtx  (addEdgeHelper e g) v = findVtx g v
-    inEdges  (addEdgeHelper e g) v with eq? v (dst e)
-    ... | yes _ = (src e , weight e) ∷ inEdges g v
-    ... | no  _ = inEdges g v
-    outEdges (addEdgeHelper e g) v with eq? v (src e)
-    ... | yes _ = (dst e , weight e) ∷ outEdges g v
-    ... | no  _ = outEdges g v
-    delVtx   (addEdgeHelper e g) v with eq? v (src e) | eq? v (dst e)
-    ... | yes _ | _     = g
-    ... | no  _ | yes _ = g
-    ... | no  _ | no  _ = addEdgeHelper e (delVtx g v)
-
--- TODO : complete graphs
-
--- TODO : complete bipartite graphs
-
-------------------------------------------------------------------------
--- Graph properties
-
--- isEmpty : Graph → Set
-
--- isFinite : Graph → Set
+addEdge : ∀ {n vs} (i j : Fin n) (w : N) (g : Graph n vs) 
+          → Graph n vs
+addEdge {zero}  {[]} i j w ⊤ = ⊤
+inEdges (addEdge {suc n} {v ∷ vs} i j w g) k with k fin≟ i
+... | yes _ = (j , w) ∷ (inEdges g k)
+... | no  _ = inEdges g k
+outEdges (addEdge {suc n} {v ∷ vs} i j w g) k with k fin≟ j
+... | yes _ = (i , w) ∷ outEdges g k
+... | no  _ = outEdges g k
+delVtx (addEdge {suc n} {v ∷ vs} i j w g) k with k fin≟ i | k fin≟ j 
+... | yes _ | _     = delVtx g k
+... | no  _ | yes _ = delVtx g k    
+delVtx (addEdge {suc n} {v ∷ vs} zero    _       _ _) zero    | no p | no _ = ⊥-elim (p refl)
+delVtx (addEdge {suc n} {v ∷ vs} (suc _) zero    _ _) zero    | no _ | no q = ⊥-elim (q refl)
+delVtx (addEdge {suc n} {v ∷ vs} (suc i) (suc j) w g) zero    | no _ | no _ = addEdge i j w (delVtx g zero)
+delVtx (addEdge {suc n} {v ∷ vs} i       j       w g) (suc k) | no _ | no _ = addEdge (pinch k i) (pinch k j) w (delVtx g (suc k))
+unique-vs (addEdge {suc n} {v ∷ vs} i j w g) = unique-vs g
 
