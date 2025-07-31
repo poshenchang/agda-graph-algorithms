@@ -2,23 +2,18 @@
 
 open import Data.Nat as Nat
 open import Data.Nat.Properties
-open import Data.Nat.Induction renaming (<-wellFounded to ℕ-wf)
 open import Data.List as List
+open import Data.List.Membership.Propositional as List using (_∈_)
 open import Data.Vec as Vec
 open import Data.Fin
 open import Data.Maybe
 open import Data.Unit
 open import Data.Sum
 open import Data.Product
-open import Data.Product.Relation.Binary.Lex.Strict
 open import Relation.Binary
 open import Relation.Binary.PropositionalEquality
-open import Relation.Binary.Construct.On
 open import Relation.Nullary
 open import Function.Base
-open import Induction.WellFounded
-open import Level
-
 
 module Algorithm.Traversal 
   (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
@@ -30,65 +25,52 @@ open nonEmptyGraph
 ------------------------------------------------------------------------
 -- Traversal algorithms
 
-record traversal : Set where
-  field
-    size   : ℕ
-    {vs}     : Vec A size
-    graph  : Graph size vs
-    list   : List A
-    result : List A
+mutual
 
-open traversal
+  dfs : ∀ {n vs} → List A → Graph n vs → List A
+  dfs {Nat.zero}  xs       g = []
+  dfs {Nat.suc n} xs       g = dfsUtil xs g
 
-emptyTraversal : traversal
-emptyTraversal = record
-  { size   = Nat.zero
-  ; graph  = tt
-  ; list   = []
-  ; result = []
-  }
+  dfsUtil : ∀ {n vs} → List A → Graph (Nat.suc n) vs → List A
+  dfsUtil [] g = []
+  dfsUtil (x ∷ xs) g with findVtx g x
+  ... | just i  = x ∷ dfs (gsuc g i List.++ xs) (delVtx g i)
+  ... | nothing = dfsUtil xs g
 
-private
-  trav→pair : traversal → ℕ × ℕ
-  trav→pair t = (size t , List.length (list t))
+-- open import Data.Bool
 
-_<trav_ : Rel traversal _
-_<trav_ = (×-Lex _≡_ Nat._<_ Nat._<_) on trav→pair
+-- merge' : (cmp : A → A → Bool) → List A → List A → List A
+-- merge' cmp [] ys = ys
+-- merge' cmp xs [] = xs
+-- merge' cmp (x ∷ xs) (y ∷ ys) with cmp x y
+-- ... | true  = x ∷ merge' cmp xs (y ∷ ys)
+-- ... | false = y ∷ merge' cmp (x ∷ xs) ys
 
-trav-wf : WellFounded _<trav_
-trav-wf = wellFounded trav→pair (×-wellFounded ℕ-wf ℕ-wf)
+mutual
 
-module WFTraversal = Induction.WellFounded.All trav-wf 0ℓ
+  bfs : ∀ {n vs} → List A → Graph n vs → List A
+  bfs {Nat.zero}  xs       g = []
+  bfs {Nat.suc n} xs       g = bfsUtil xs g
 
-dfs-step : (t : traversal) → ({u : traversal} → u <trav t → traversal) → traversal
-dfs-step record { size = Nat.zero ; graph = _ ; list = _  ; result = _ } _ = emptyTraversal
-dfs-step record { size = (suc n)  ; graph = _ ; list = [] ; result = _ } _ = emptyTraversal
-dfs-step record { size = (suc n)  ; graph = g ; list = (x ∷ xs) ; result = res } f with findVtx g x 
-... | just i  = f {record { size = n ; graph = delVtx g i ; list = gsuc g i List.++ xs ; result = x ∷ res }}
-                  (inj₁ (s≤s ≤-refl))
-... | nothing = f {record { size = (Nat.suc n) ; graph = g ; list = xs ; result = res }}
-                  (inj₂ (refl , s≤s ≤-refl))
+  bfsUtil : ∀ {n vs} → List A → Graph (Nat.suc n) vs → List A
+  bfsUtil [] g = []
+  bfsUtil (x ∷ xs) g with findVtx g x
+  ... | just i  = x ∷ bfs (xs List.++ gsuc g i) (delVtx g i)
+  ... | nothing = bfsUtil xs g
 
-dfs-wfRec : traversal → traversal
-dfs-wfRec = WFTraversal.wfRec (λ _ → traversal) dfs-step
+------------------------------------------------------------------------
+-- Properties
 
--- how depth first search would look like without needing to dealing with nasty
--- termination issues
--- dfs : ∀ {n vs} → List A → Graph n vs → List A
--- dfs {Nat.zero} xs       g = []
--- dfs {suc n}    []       g = []
--- dfs {suc n}    (x ∷ xs) g with findVtx g x
--- ... | just i  = x ∷ dfs (gsuc g i List.++ xs) (delVtx g i)
--- ... | nothing = dfs xs g
+-- define neighbors
+_[_⇀_] : ∀ {n vs} → Graph n vs → A → A → Set
+g [ u ⇀ v ] = ∃[ i ] findVtx g u ≡ just i × v ∈ gsuc g i
 
-bfs-step : (t : traversal) → ({u : traversal} → u <trav t → traversal) → traversal
-bfs-step record { size = Nat.zero ; graph = _ ; list = _  ; result = _ } _ = emptyTraversal
-bfs-step record { size = (suc n)  ; graph = _ ; list = [] ; result = _ } _ = emptyTraversal
-bfs-step record { size = (suc n)  ; graph = g ; list = (x ∷ xs) ; result = res } f with findVtx g x 
-... | just i  = f {record { size = n ; graph = delVtx g i ; list = xs List.++ gsuc g i ; result = x ∷ res }}
-                  (inj₁ (s≤s ≤-refl))
-... | nothing = f {record { size = (Nat.suc n) ; graph = g ; list = xs ; result = res }}
-                  (inj₂ (refl , s≤s ≤-refl))
+-- define reachability
+data _[_↝_] : ∀ {n vs} → Graph n vs → A → A → Set where
+  here : ∀ {n vs} → {v : A} → {g : Graph n vs} → g [ v ↝ v ]
+  step : ∀ {n vs} → {u v w : A} → {g : Graph n vs}
+         → g [ u ↝ v ] → g [ v ⇀ w ] → g [ u ↝ w ]
 
-bfs-wfRec : traversal → traversal
-bfs-wfRec = WFTraversal.wfRec (λ _ → traversal) bfs-step
+-- dfs-↝ : ∀ {n vs} → (g : Graph n vs) → (u v : A)
+--          → g [ u ↝ v ] → v ∈ dfs (u ∷ []) g
+-- dfs-↝ g u v g[u↝v] = {!   !}
