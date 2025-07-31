@@ -20,10 +20,11 @@ open import Induction.WellFounded
 open import Level
 
 
-module Algorithm (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
-    (N : Set) (zero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
+module Algorithm.Traversal 
+  (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
+  (N : Set) where
 
-open import Data.Core A eq? N zero _+_ _≤_
+open import Data.Core A eq? N
 open nonEmptyGraph
 
 ------------------------------------------------------------------------

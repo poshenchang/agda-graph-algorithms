@@ -20,8 +20,9 @@ open import Function
 ------------------------------------------------------------------------
 -- Definitions
 
-module Data.Core (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
-    (N : Set) (Nzero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
+module Data.Core 
+  (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
+  (N : Set) where
 
 -- 'r' for recursive
 
