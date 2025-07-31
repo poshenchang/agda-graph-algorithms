@@ -4,7 +4,8 @@ open import Data.Empty using (⊥; ⊥-elim)
 open import Data.Nat using (ℕ; suc; zero; pred)
 open import Data.Fin renaming (_≟_ to _fin≟_)
 open import Data.Unit
-open import Data.List as List
+open import Data.Maybe
+open import Data.List as List hiding (findIndex)
 open import Data.Vec as Vec
 open import Data.Vec.Membership.Propositional
 open import Data.Vec.Relation.Unary.All
@@ -19,7 +20,7 @@ open import Function
 ------------------------------------------------------------------------
 -- Definitions
 
-module Data.Core (A : Set)
+module Data.Core (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
     (N : Set) (Nzero : N) (_+_ : N → N → Set) (_≤_ : N → N → Set) where
 
 -- 'r' for recursive
@@ -88,4 +89,24 @@ delVtx (addEdge {suc n} {v ∷ vs} (suc _) zero    _ _) zero    | no _ | no q = 
 delVtx (addEdge {suc n} {v ∷ vs} (suc i) (suc j) w g) zero    | no _ | no _ = addEdge i j w (delVtx g zero)
 delVtx (addEdge {suc n} {v ∷ vs} i       j       w g) (suc k) | no _ | no _ = addEdge (pinch k i) (pinch k j) w (delVtx g (suc k))
 unique-vs (addEdge {suc n} {v ∷ vs} i j w g) = unique-vs g
+
+------------------------------------------------------------------------
+-- Utility functions
+
+-- Requires decidable equality on A
+private
+  findIndex : ∀ {n} → (xs : Vec A n) → (x : A) → Maybe (Fin n)
+  findIndex [] x = nothing
+  findIndex (y ∷ ys) x with eq? x y
+  ... | yes _ = just zero
+  ... | no  _ = Data.Maybe.map suc (findIndex ys x)
+
+findVtx : ∀ {n vs} → (g : Graph n vs) → A → Maybe (Fin n)
+findVtx {vs = vs} g v = findIndex vs v
+
+gsuci : ∀ {n vs} → Graph n vs → Fin n → List (Fin n)
+gsuci {suc _} g i = List.map proj₁ (outEdges g i)
+
+gsuc : ∀ {n vs} → Graph n vs → Fin n → List A
+gsuc {vs = vs} g i = List.map (λ j → Vec.lookup vs j) (gsuci g i)
 
