@@ -10,6 +10,7 @@ open import Data.Vec as Vec
 open import Data.Vec.Membership.Propositional
 open import Data.Vec.Relation.Unary.All
 open import Data.Vec.Relation.Unary.AllPairs.Core
+open import Data.Vec.Relation.Unary.Any
 open import Data.Vec.Relation.Unary.Unique.Propositional hiding (_∷_; [])
 open import Data.Vec.Relation.Unary.Unique.Setoid as Setoid hiding (_∷_; []; Unique)
 open import Data.Product
@@ -104,6 +105,20 @@ private
 
 findVtx : ∀ {n vs} → (g : Graph n vs) → A → Maybe (Fin n)
 findVtx {vs = vs} g v = findIndex vs v
+
+findIndex-∈ : ∀ {n : ℕ} → {x : A} → {xs : Vec A n}
+            → x ∈ xs → ∃[ i ] findIndex xs x ≡ just i
+findIndex-∈ {x = x} {xs = y ∷ ys} (here x≡y) with eq? x y
+... | yes _   = zero , refl
+... | no  x≢y = ⊥-elim (x≢y x≡y)
+findIndex-∈ {x = x} {xs = y ∷ ys} (there x∈ys) with eq? x y
+... | yes _ = zero , refl
+... | no  _ = let i , eq = findIndex-∈ {x = x} {xs = ys} x∈ys
+              in  (suc i) , cong (Data.Maybe.map suc) eq
+
+findVtx-∈ : ∀ {n vs} → {g : Graph n vs} → {v : A}
+            → v ∈ vs → ∃[ i ] findVtx g v ≡ just i
+findVtx-∈ v∈g = findIndex-∈ v∈g
 
 gsuci : ∀ {n vs} → Graph n vs → Fin n → List (Fin n)
 gsuci {suc _} g i = List.map proj₁ (outEdges g i)
