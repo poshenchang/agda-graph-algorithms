@@ -20,7 +20,7 @@ open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary
 open import Function.Base
 
-module Algorithm.Traversal 
+module Algorithm.Traversal2
   (A : Set) (eq? : (x y : A) → Dec (x ≡ y))
   (N : Set) where
 
@@ -67,48 +67,26 @@ data _[_↝_] : ∀ {n vs} → Graph n vs → A → A → Set where
   step : ∀ {n vs} → {u v w : A} → {g : Graph n vs}
          → g [ u ⇀ v ] → g [ v ↝ w ] → g [ u ↝ w ]
 
-private
-  just≢nothing : {B : Set} → {x : B} → just x ≢ nothing
-  just≢nothing ()
+↝⇒nonEmpty : ∀ {vs} → {g : Graph zero vs} → {u v : A}
+                → g [ u ↝ v ] → ⊥
+↝⇒nonEmpty (step _ g[u↝v]) = ↝⇒nonEmpty g[u↝v]
 
-  ∈-++ₗ : {B : Set} → {x : B} → {xs ys : List B}
-        → x ∈ xs → x ∈ ys List.++ xs
-  ∈-++ₗ {B} {x} {xs} {[]}     p = p
-  ∈-++ₗ {B} {x} {xs} {y ∷ ys} p = there (∈-++ₗ p)
-
-  ∈-++ᵣ : {B : Set} → {x : B} → {xs ys : List B}
-        → x ∈ xs → x ∈ xs List.++ ys
-  ∈-++ᵣ (here px) = here px
-  ∈-++ᵣ (there p) = there (∈-++ᵣ p)
-
-  ↝⇒nonEmpty : ∀ {vs} → {g : Graph zero vs} → {u v : A}
-                 → g [ u ↝ v ] → ⊥
-  ↝⇒nonEmpty (step _ g[u↝v]) = ↝⇒nonEmpty g[u↝v]
+↝⇒∈ : ∀ {n vs} → {g : Graph n vs} → {u v : A}
+        → g [ u ↝ v ] → u ∈Vec vs
+↝⇒∈ g[u↝v] = {!   !}
 
 mutual
   dfs-↝ : ∀ {n vs} → (g : Graph n vs) → (u v : A) → (xs : List A)
           → u ∈ xs → g [ u ↝ v ] → v ∈ dfs xs g
-  dfs-↝ {zero} {[]} tt _ _ _ _ (base ())
-  dfs-↝ {zero}  g u v xs u∈xs (step _ g[w↝v]) = ⊥-elim (↝⇒nonEmpty g[w↝v])
+  dfs-↝ {zero} {[]} _ _ _ _ _ g[u↝v] = ⊥-elim (helper (↝⇒∈ g[u↝v]))
+    where helper : ∀ {v} → v ∈Vec [] → ⊥
+          helper ()
   dfs-↝ {suc n} g u v xs u∈xs g[u↝v] = dfsUtil-↝ g u v xs u∈xs g[u↝v]
 
   dfsUtil-↝ : ∀ {n vs} → (g : Graph (suc n) vs) → (u v : A) → (xs : List A)
               → u ∈ xs → g [ u ↝ v ] → v ∈ dfsUtil xs g
-  dfsUtil-↝ g u .u (x ∷ xs) (here u≡x) (base u∈vs) with findVtx g x in eq
-  ... | just _  = here u≡x
-  ... | nothing = let _ , px = findVtxi-∈ u∈vs
-                  in  ⊥-elim (just≢nothing (trans (trans (sym px) (cong (findVtx g) u≡x)) eq))
-  dfsUtil-↝ g u w (x ∷ xs) (here u≡x) g[u↝w]@(step g[u⇀v] g[v↝w]) with findVtx g x in eq
-  ... | just i  = let P = ∈-++ᵣ ((proj₂ g[u⇀v]) (trans (cong (findVtx g) u≡x) eq))
-                  in  there (dfs-↝ (delVtx g i) _ w (gsuc g i List.++ xs) P {!   !})
-  ... | nothing = let _ , px = findVtxi-∈ (proj₁ g[u⇀v])
-                  in  ⊥-elim (just≢nothing (trans (trans (sym px) (cong (findVtx g) u≡x)) eq))
-  dfsUtil-↝ g u .u (x ∷ xs) (there u∈xs) g[u↝v]@(base u∈vs) with findVtx g x in eq
-  ... | nothing = dfsUtil-↝ g u u xs u∈xs g[u↝v]
-  ... | just i  with eq? u x
-  ...     | yes u≡x = here u≡x
-  -- TODO : need u ∈ xs → u ≢ x → u ∈ remove vs x
-  ...     | no  _   = there (dfs-↝ (delVtx g i) u u (gsuc g i List.++ xs) (∈-++ₗ u∈xs) (base {!   !}))
-  dfsUtil-↝ g u w (x ∷ xs) (there u∈xs) g[u↝w]@(step g[u⇀v] g[v↝w]) with findVtx g x
-  ... | just _  = {!   !}
-  ... | nothing = dfsUtil-↝ g u w xs u∈xs g[u↝w]
+  dfsUtil-↝ g u v (x ∷ xs) u∈xs g[u↝v] with findVtx g x 
+  ... | just i  = {!   !}
+  dfsUtil-↝ g u v (x ∷ xs) (here px)    g[u↝v] | nothing = {!   !}
+  dfsUtil-↝ g u v (x ∷ xs) (there u∈xs) g[u↝v] | nothing 
+    = dfsUtil-↝ g u v xs u∈xs g[u↝v]
