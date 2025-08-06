@@ -8,6 +8,7 @@ open import Data.Unit
 open import Data.Maybe
 open import Data.Maybe.Properties
 open import Data.List as List
+open import Data.List.Membership.Propositional renaming (_∈_ to _∈List_)
 open import Data.Vec as Vec
 open import Data.Vec.Membership.Propositional
 open import Data.Vec.Relation.Unary.All
@@ -108,36 +109,39 @@ findVtxi (y ∷ ys) x with eq? x y
 findVtx : ∀ {n vs} → (g : Graph n vs) → A → Maybe (Fin n)
 findVtx {vs = vs} g v = findVtxi vs v
 
-findVtxi-∈ : ∀ {n : ℕ} → {x : A} → {xs : Vec A n}
-            → x ∈ xs → ∃[ i ] findVtxi xs x ≡ just i
-findVtxi-∈ {x = x} {xs = y ∷ ys} (here x≡y) with eq? x y
-... | yes _   = zero , refl
+vfindVtxi : ∀ {n} → (xs : Vec A n) → (v : A) → v ∈ xs → Fin n
+vfindVtxi xs       v (here  px)   = zero
+vfindVtxi (x ∷ xs) v (there v∈xs) = suc (vfindVtxi xs v v∈xs)
+
+vfindVtx : ∀ {n vs} → (g : Graph n vs) → (v : A) → v ∈ vs → Fin n
+vfindVtx {vs = vs} g v v∈vs = vfindVtxi vs v v∈vs
+
+findVtxi≡ : ∀ {n} → (xs : Vec A n) → Unique xs → (x : A) → (x∈xs : x ∈ xs) → findVtxi xs x ≡ just (vfindVtxi xs x x∈xs)
+findVtxi≡ (y ∷ xs) unique-xs x (here x≡y) with eq? x y
+... | yes _   = refl
 ... | no  x≢y = ⊥-elim (x≢y x≡y)
-findVtxi-∈ {x = x} {xs = y ∷ ys} (there x∈ys) with eq? x y
-... | yes _ = zero , refl
-... | no  _ = let i , eq = findVtxi-∈ {x = x} {xs = ys} x∈ys
-              in  (suc i) , cong (Data.Maybe.map suc) eq
+findVtxi≡ (y ∷ xs) (y∉xs ∷ unique-xs) x (there x∈xs) with eq? x y
+... | yes _ = ⊥-elim {!   !}
+... | no _ = {!   !}
+
+findVtx≡ : ∀ {n vs} → (g : Graph n vs) → (v : A) → (v∈vs : v ∈ vs) → findVtx g v ≡ just (vfindVtx g v v∈vs)
+findVtx≡ {vs = vs} g v v∈vs = {!   !}
 
 findVtx-∈ : ∀ {n vs} → {g : Graph n vs} → {v : A}
-            → v ∈ vs → ∃[ i ] findVtx g v ≡ just i
-findVtx-∈ v∈g = findVtxi-∈ v∈g
-
-findVtx⇒lookup : ∀ {n i vs} → {g : Graph n vs} → {v : A}
-                     → findVtx g v ≡ just i → Vec.lookup vs i ≡ v
-findVtx⇒lookup {i = zero}  {x ∷ xs} {v = v} v≡justi with eq? x v
-... | yes x≡v = x≡v
-... | no  x≢v = {!   !}
-findVtx⇒lookup {i = suc i} {x ∷ xs} {v = v} v≡justi = {!   !}
-
-rremove-preserve : ∀ {n i vs} → {g : Graph (suc n) vs} → {v x : A}
-                    → findVtx g x ≡ just i → v ∈ vs → v ≢ x → v ∈ (rremove vs i)
-rremove-preserve {i = zero}  eq (here  px)   v≢x = {!   !}
-rremove-preserve {i = suc i} eq (here  px)   v≢x = {!   !}
-rremove-preserve {suc n} {i = zero}  eq (there v∈vs) v≢x = {!   !}
-rremove-preserve {suc n} {i = suc i} eq (there v∈vs) v≢x = there {! rremove-preserve   !}
+             → v ∈ vs → findVtx g v ≢ nothing
+findVtx-∈ v∈vs = {!   !}
 
 gsuci : ∀ {n vs} → Graph n vs → Fin n → List (Fin n)
 gsuci {suc _} g i = List.map proj₁ (outEdges g i)
 
 gsuc : ∀ {n vs} → Graph n vs → Fin n → List A
 gsuc {vs = vs} g i = List.map (λ j → Vec.lookup vs j) (gsuci g i)
+
+vgsuc : ∀ {n vs} → Graph n vs → (v : A) → v ∈ vs → List A
+vgsuc {vs = vs} g v v∈vs = gsuc g (vfindVtx g v v∈vs)
+
+V_[_]=_ : ∀ {n vs} → Graph n vs → Fin n → A → Set
+V_[_]=_ {vs = vs} g i v = findVtx g v ≡ just i
+
+_[_⇀_] : ∀ {n vs} → Graph n vs → A → A → Set
+_[_⇀_] g u v = ∃[ i ] findVtx g u ≡ just i × v ∈List gsuc g i
