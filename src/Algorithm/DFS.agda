@@ -1,6 +1,6 @@
 open import Function
 open import Data.Nat
-open import Data.Product using (Σ; proj₁; proj₂; Σ-syntax)
+open import Data.Product using (Σ; _×_; _,_; proj₁; proj₂; Σ-syntax)
 open import Data.List using (List; []; _∷_; _++_; map)
 open import Data.List.Relation.Unary.All using (All)
 open import Data.List.Relation.Unary.Any using (here; there)
@@ -136,14 +136,6 @@ comp-pref⇒comp p<q (ext q⊏r e) = stepᵣ (comp-pref⇒comp p<q q⊏r) e
 <P-trans (comp p<q) (comp q<r) = comp (<SP-trans p<q q<r)
 
 ------------------------------------------------------------------------
--- TODO : existence of a "smallest" path among paths between 
---        two vertices
-
--- TODO : define existence of a path with restriction to a subset
---        of vertices, e.g. a path from u to v that only uses vertices
---        in a given set S ⊆ V
-
-------------------------------------------------------------------------
 -- paths output by DFS are lexicographically ordered
 
 -- ascendingly sorted by strict lexicographic order
@@ -253,5 +245,34 @@ mutual
                       (extendPath-sorted sorted))
   ... | nothing   = dfsUtil-sorted src ord ps (tail-sorted sorted)
 
--- paths output by DFS are lexicographically minimal
--- (among those with vertices in the order given)
+------------------------------------------------------------------------
+-- existence of a minimal path among paths between two vertices
+
+data _⊆P_ : ∀ {u v} {n} → (p : Path u v) → (ord : Vec V n) → Set where
+  empty  : ∀ {u} {n} {ord : Vec V n} → u ∈Vec ord → ([] {u}) ⊆P ord
+  cons   : ∀ {u v w} {n} → {e : E v w} → {ord : Vec V (suc n)} 
+           → {ord' : Vec V n} → {p : Path u v} → del ord w ≡ just ord'
+           → p ⊆P ord' → (p ▷ e) ⊆P ord
+
+-- LMP stands for lexicographically minimal path
+record LMP {u v : V} (p : Path u v) {n : ℕ} (ord : Vec V n) : Set where
+  field
+    path⊆ord : p ⊆P ord
+    minimal : ∀ {q : Path u v} → q ⊆P ord → p ≤P q
+
+minimalPath : ∀ {u v} {n} → (ord : Vec V n) 
+              → Σ[ p ∈ Path u v ] p ⊆P ord
+              → Σ[ p ∈ Path u v ] LMP p ord
+minimalPath ord (p , p⊆ord) = {!   !}
+
+------------------------------------------------------------------------
+-- paths output by single-sourced DFS are exactly the LMPs
+
+DFS⇒LMP : ∀ {n} → (src : V) → (ord : Vec V n) → {p : Σ[ v ∈ V ] Path src v}
+           → p ∈ dfs src ord ((src , []) ∷ []) → LMP (proj₂ p) ord
+DFS⇒LMP src ord p∈dfs = {!   !}
+
+LMP⇒DFS : ∀ {n} → (src : V) → (ord : Vec V n) 
+           → {p : Σ[ v ∈ V ] Path src v} → LMP (proj₂ p) ord
+           → p ∈ dfs src ord ((src , []) ∷ [])
+LMP⇒DFS src ord lmp = {!   !}
