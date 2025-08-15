@@ -1,16 +1,18 @@
 open import Data.Nat using (ℕ; zero; suc)
-open import Data.List using (List; []; _∷_; _++_; _∷ʳ_; concat; map; reverse)
+open import Data.List using (List; []; _∷_; _++_; _∷ʳ_; concat; map; reverse; foldl)
 open import Data.List.Relation.Unary.Any using (here; there)
 open import Data.List.Relation.Unary.All using (All; []; _∷_)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.List.Relation.Unary.Unique.Propositional
-open import Data.List.Relation.Unary.AllPairs.Core
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Product using (Σ-syntax; _×_; _,_; proj₁; proj₂)
 open import Data.Empty using (⊥; ⊥-elim)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; cong; subst; _≢_)
 open import Relation.Nullary using (¬_)
 open import Function.Base
+
+open import Data.Tree
+open import Data.Tree.Properties
 
 module Algorithm.TopoSort
   (V : Set) (Edges : V → List V) where
@@ -24,16 +26,6 @@ data E : V → V → Set where
 data Path : V → V → Set where
   []   : ∀ {v}                        → Path v v
   _▷_ : ∀ {u v w} → Path u v → E v w → Path u w
-
-record Tree (A : Set) : Set where
-  inductive
-  constructor node
-  field
-    label : A
-    children : List (Tree A)
-
-Forest : (A : Set) → Set
-Forest A = List (Tree A)
 
 -- preorder traversal
 mutual
@@ -64,8 +56,14 @@ Traversal = List V → Forest V
 -- notion of a path belonging to a given subset of vertices
 data _⊆P_ : ∀ {u v} → (p : Path u v) → (vs : List V) → Set where
   empty  : ∀ {u} {vs : List V} → u ∈ vs → ([] {u}) ⊆P vs
-  cons   : ∀ {u v w} → {e : E v w} → {vs : List V} 
-           → {p : Path u v} → p ⊆P vs → (p ▷ e) ⊆P vs
+  cons   : ∀ {u v w} → {e : E v w} → {p : Path u v}
+           → {vs : List V} 
+           → w ∈ vs → p ⊆P vs → (p ▷ e) ⊆P vs
+
+⊆P⇒head∈ : ∀ {u v} {p : Path u v} {vs : List V}
+            → p ⊆P vs → u ∈ vs
+⊆P⇒head∈ (empty u∈vs)  = u∈vs
+⊆P⇒head∈ (cons _ p⊆vs) = ⊆P⇒head∈ p⊆vs
 
 Acyclic : (vs : List V) → Set
 Acyclic vs = ∀ {v} → (p : Path v v) → p ⊆P vs → p ≡ []
@@ -109,19 +107,85 @@ Unique≼V⇒∀≼ unique (x∈xs' , y∈xs' , x≼y) x∈xs y∈xs
     (subst (x∈xs' ≼_) (∈Unique⇒prop unique y∈xs' y∈xs) x≼y)
 
 ------------------------------------------------------------------------
+-- helper functions for revcat
+
+-- reverse = foldl (λ rev x → x ∷ rev) []
+
+revcat : ∀ {A : Set} → List A → List A → List A
+revcat xs ys = foldl (λ rev x → x ∷ rev) ys xs
+
+revcat-∈ᵣ : ∀ {A : Set} {x : A} (xs ys : List A)
+            → x ∈ ys → x ∈ revcat xs ys
+revcat-∈ᵣ []       ys x∈ys = x∈ys
+revcat-∈ᵣ (x ∷ xs) ys x∈ys = revcat-∈ᵣ xs (x ∷ ys) (there x∈ys)
+
+revcat-∈ₗ : ∀ {A : Set} {x : A} (xs ys : List A)
+            → x ∈ xs → x ∈ revcat xs ys
+revcat-∈ₗ (x ∷ xs) ys (here  refl) = revcat-∈ᵣ xs (x ∷ ys) (here refl)
+revcat-∈ₗ (x ∷ xs) ys (there x∈xs) = revcat-∈ₗ xs (x ∷ ys) x∈xs
+
+∈revcat-split : ∀ {A : Set} {x : A} (xs ys : List A)
+                → x ∈ revcat xs ys → (x ∈ xs) ⊎ (x ∈ ys)
+∈revcat-split []       ys x∈rev = inj₂ x∈rev
+∈revcat-split (x ∷ xs) ys x∈rev with ∈revcat-split xs (x ∷ ys) x∈rev
+... | inj₁ p           = inj₁ (there p)
+... | inj₂ (here refl) = inj₁ (here refl)
+... | inj₂ (there p)   = inj₂ p
+
+revcat-Unique : ∀ {A : Set} (xs ys : List A) → Unique xs → Unique ys
+                → (∀ {x} → x ∈ xs → All (_≢_ x) ys) → Unique (revcat xs ys)
+revcat-Unique []       ys unique-xs unique-ys f = unique-ys
+revcat-Unique (x ∷ xs) ys (p ∷ unique-xs) unique-ys f
+  = revcat-Unique xs (x ∷ ys) unique-xs
+                  (f (here refl) ∷ unique-ys)
+                  λ q → helper p q ∷ f (there q)
+  where helper : ∀ {x y xs} → All (x ≢_) xs → y ∈ xs → y ≢ x
+        helper (px ∷ all) (here refl) = px ∘ sym
+        helper (px ∷ all) (there y∈xs) = helper all y∈xs
+
+revcat-≼Vᵣ : ∀ {A : Set} {x y : A} (xs ys : List A)
+             → ys [ y ≼V x ] → revcat xs ys [ y ≼V x ]
+revcat-≼Vᵣ []        ys p = p
+revcat-≼Vᵣ (x' ∷ xs) ys (x∈ys , y∈ys , x≼y) 
+  = revcat-≼Vᵣ xs (x' ∷ ys) (there x∈ys , there y∈ys , step x≼y)
+
+revcat-≼Vₘ : ∀ {A : Set} {x y : A} (xs ys : List A)
+             → y ∈ xs → x ∈ ys → revcat xs ys [ y ≼V x ]
+revcat-≼Vₘ (x' ∷ xs) ys (here  refl) x∈ys
+  = revcat-≼Vᵣ xs (x' ∷ ys) (here refl , there x∈ys , base)
+revcat-≼Vₘ (x' ∷ xs) ys (there y∈xs) x∈ys
+  = revcat-≼Vₘ xs (x' ∷ ys) y∈xs (there x∈ys)
+
+revcat-≼Vₗ : ∀ {A : Set} {x y : A} (xs ys : List A)
+             → xs [ x ≼V y ] → revcat xs ys [ y ≼V x ]
+revcat-≼Vₗ (x' ∷ xs) ys (here  refl , here  refl , x≼y)
+  = revcat-≼Vᵣ xs (x' ∷ ys) (here refl , here refl , base)
+revcat-≼Vₗ (x' ∷ xs) ys (here  refl , there y∈xs , x≼y)
+  = revcat-≼Vₘ xs (x' ∷ ys) y∈xs (here refl)
+revcat-≼Vₗ (x' ∷ xs) ys (there x∈xs , there y∈xs , step x≼y)
+  = revcat-≼Vₗ xs (x' ∷ ys) (x∈xs , y∈xs , x≼y)
+
+------------------------------------------------------------------------
 -- helper functions for reverse
+
+-- Unique (x ∷ xs) = All (_≢ x) xs × Unique xs
 
 reverse-Unique : ∀ {A : Set} {xs : List A} → Unique xs
                  → Unique (reverse xs)
-reverse-Unique unique = {!   !}
+reverse-Unique unique = revcat-Unique _ _ unique [] λ _ → []
+
+∈⇒∈reverse : ∀ {A : Set} {x : A} {xs : List A}
+            → x ∈ xs → x ∈ reverse xs
+∈⇒∈reverse x∈xs = revcat-∈ₗ _ [] x∈xs
 
 ∈reverse⇒∈ : ∀ {A : Set} {xs : List A} {x : A}
             → x ∈ reverse xs → x ∈ xs
-∈reverse⇒∈ x∈xs = {!   !}
+∈reverse⇒∈ {xs = xs} x∈rxs with ∈revcat-split xs [] x∈rxs
+... | inj₁ p = p
 
-reverse-≼V : ∀ {A : Set} {xs : List A} {x y : A}
+reverse-≼V : ∀ {A : Set} {x y : A} {xs : List A}
              → xs [ x ≼V y ] → reverse xs [ y ≼V x ]
-reverse-≼V (x∈xs , y∈xs , x≼y) = {!   !}
+reverse-≼V p = revcat-≼Vₗ _ [] p
 
 ------------------------------------------------------------------------
 -- helper functions for snoc
@@ -146,6 +210,22 @@ snoc-match {xs = x ∷ xs} (there p) with snoc-match p
 ... | inj₁ q    = inj₁ (there q)
 ... | inj₂ refl = inj₂ refl
 
+-- analogous to base and step for _≼_ (precedence), but with snoc
+baseʳ : ∀ {A : Set} {x y : A} {xs : List A}
+        → {p : y ∈ xs ∷ʳ x} → p ≼ hereʳ refl
+baseʳ {xs = []}     {p = here refl} = base
+baseʳ {xs = x ∷ xs} {p = here refl} = base
+baseʳ {xs = x ∷ xs} {p = there q}   = step baseʳ
+
+stepʳ : ∀ {A : Set} {x y z : A} {xs : List A}
+        → {p : y ∈ xs} → {q : z ∈ xs} → p ≼ q
+        → thereʳ {x = x} p ≼ thereʳ q
+stepʳ {p = here refl}           p≼q        = base
+stepʳ {p = there p}   {there q} (step p≼q) = step (stepʳ p≼q)
+
+------------------------------------------------------------------------
+-- helper functions for concatenation
+
 -- concatenation preserves membership
 ∈-++ᵣ : {B : Set} → {x : B} → {xs ys : List B}
       → x ∈ xs → x ∈ ys ++ xs
@@ -166,97 +246,79 @@ snoc-match {xs = x ∷ xs} (there p) with snoc-match p
 ... | inj₁ q = inj₁ (there q)
 ... | inj₂ q = inj₂ q
 
--- analogous to base and step for _≼_ (precedence), but with snoc
-baseʳ : ∀ {A : Set} {x y : A} {xs : List A}
-        → {p : y ∈ xs ∷ʳ x} → p ≼ hereʳ refl
-baseʳ {xs = []}     {p = here refl} = base
-baseʳ {xs = x ∷ xs} {p = here refl} = base
-baseʳ {xs = x ∷ xs} {p = there q}   = step baseʳ
-
-stepʳ : ∀ {A : Set} {x y z : A} {xs : List A}
-        → {p : y ∈ xs} → {q : z ∈ xs} → p ≼ q
-        → thereʳ {x = x} p ≼ thereʳ q
-stepʳ {p = here refl}           p≼q        = base
-stepʳ {p = there p}   {there q} (step p≼q) = step (stepʳ p≼q)
-
 ------------------------------------------------------------------------
 -- correctness of topological sort on acyclic graphs
 
 module _ (traversal : Traversal)
          (uniqueness : ∀ {vs} → Unique (postorderF (traversal vs)))
-         (completeness : ∀ {v vs} → v ∈ vs → v ∈ postorderF (traversal vs))
-         (soundness : ∀ {v vs} → v ∈ postorderF (traversal vs) → v ∈ vs)
+         (completeness : ∀ {v vs} → v ∈ vs → v ∈F traversal vs)
+         (soundness : ∀ {v vs} → v ∈F traversal vs → v ∈ vs)
+         (TreeEdge⇒Edge : ∀ {u v vs} → TreeEdgeF (traversal vs) u v → E u v)
   where
 
   -- topological sort
   topoSort : List V → List V
   topoSort = reverse ∘ postorderF ∘ traversal
 
-  mutual
+  lemma₁ : (vs : List V) → {u v : V} → E u v
+         → (u∈trav : u ∈F traversal vs) → (v∈trav : v ∈F traversal vs)
+         → v∈trav ≼F u∈trav ⊎ descF v∈trav u∈trav
+  lemma₁ vs e u∈trav v∈trav = {!   !}
 
-    data _∈T_ : V → Tree V → Set where
-      root : ∀ {  v ts}           → v ∈T (node v ts)
-      sub  : ∀ {u v ts} → u ∈F ts → u ∈T (node v ts)
-    
-    data _∈F_ : V → Forest V → Set where
-      here  : ∀ {v t ts} → v ∈T t  → v ∈F (t ∷ ts)
-      there : ∀ {v t ts} → v ∈F ts → v ∈F (t ∷ ts)
+  TreePathF⇒Path : ∀ {u v vs} → TreePathF (traversal vs) u v → Path u v
+  TreePathF⇒Path (t , t∈ts , [] u∈t) = []
+  TreePathF⇒Path (t , t∈ts , (p ▷ e))
+    = TreePathF⇒Path (t , t∈ts , p) ▷ TreeEdge⇒Edge (t , t∈ts , e)
   
-  -- precedence relations on trees and forests  
-  mutual
-    
-    data _≼T_ : ∀ {u v t} → u ∈T t → v ∈T t → Set where
-      refl : ∀ {v t} {v∈t : v ∈T t} → v∈t ≼T v∈t
-      root : ∀ {v t} {v∈t : v ∈T t} → v∈t ≼T root
-      sub  : ∀ {u v w ts} {u∈ts : u ∈F ts} {v∈ts : v ∈F ts}
-             → u∈ts ≼F v∈ts → _≼T_ {t = node w ts} (sub u∈ts) (sub v∈ts)
+  TreePathF⇒⊆P : ∀ {u v vs} → (p : TreePathF (traversal vs) u v)
+                  → TreePathF⇒Path p ⊆P vs
+  TreePathF⇒⊆P (t , t∈ts , [] u∈t) = empty (soundness (∈T⇒∈F u∈t t∈ts))
+  TreePathF⇒⊆P (t , t∈ts , (p ▷ e)) 
+    = cons (soundness (∈T⇒∈F (TreeEdge⇒dst∈T e) t∈ts)) (TreePathF⇒⊆P (t , t∈ts , p))
 
-    data _≼F_ : ∀ {u v ts} → u ∈F ts → v ∈F ts → Set where
-      here  : ∀ {u v t ts} {u∈t : u ∈T t} {v∈t : v ∈T t}
-              → u∈t ≼T v∈t → _≼F_ {ts = t ∷ ts} (here u∈t) (here v∈t)
-      there : ∀ {u v t ts} {u∈t : u ∈T t} {v∈ts : v ∈F ts}
-              → _≼F_ {ts = t ∷ ts} (here u∈t) (there v∈ts)
-      step  : ∀ {u v t ts} {u∈ts : u ∈F ts} {v∈ts : v ∈F ts}
-              → u∈ts ≼F v∈ts → _≼F_ {ts = t ∷ ts} (there u∈ts) (there v∈ts)
-
-  lemma : (vs : List V) → Acyclic vs
+  lemma₂ : (vs : List V) → Acyclic vs
         → {u v : V} → E u v
         → (u∈trav : u ∈F traversal vs) → (v∈trav : v ∈F traversal vs)
         → v∈trav ≼F u∈trav
-  lemma vs acyclic e u∈trav v∈trav = {!   !}
+  lemma₂ vs acyclic e u∈trav v∈trav with lemma₁ vs e u∈trav v∈trav
+  ... | inj₁ p = p
+  ... | inj₂ p = ⊥-elim (helper (TreePathF⇒Path (descF⇒TreePathF p)) 
+                                (TreePathF⇒⊆P   (descF⇒TreePathF p)) e)
+    where helper : ∀ {u v : V} → (p : Path v u) → p ⊆P vs → E u v → ⊥
+          helper p p⊆vs e with acyclic (p ▷ e) (cons (⊆P⇒head∈ p⊆vs) p⊆vs)
+          ... | ()
 
   mutual
 
-    ∈T⇒∈postorder : ∀ {u t} → (u∈t : u ∈T t) → u ∈ postorder t
+    ∈T⇒∈postorder : ∀ {A} {u : A} {t} → (u∈t : u ∈T t) → u ∈ postorder t
     ∈T⇒∈postorder root       = hereʳ refl
     ∈T⇒∈postorder (sub u∈ts) = thereʳ (∈F⇒∈postorderF u∈ts)
 
-    ∈F⇒∈postorderF : ∀ {u ts} → (u∈ts : u ∈F ts) → u ∈ postorderF ts
+    ∈F⇒∈postorderF : ∀ {A} {u : A} {ts} → (u∈ts : u ∈F ts) → u ∈ postorderF ts
     ∈F⇒∈postorderF (here  u∈t)  = ∈-++ₗ (∈T⇒∈postorder u∈t)
     ∈F⇒∈postorderF (there u∈ts) = ∈-++ᵣ (∈F⇒∈postorderF u∈ts)
   
   mutual
 
-    ∈postorder⇒∈T : ∀ {u t} → u ∈ postorder t → u ∈T t
+    ∈postorder⇒∈T : ∀ {A} {u : A} {t} → u ∈ postorder t → u ∈T t
     ∈postorder⇒∈T {t = node v ts} u∈post with snoc-match u∈post
     ... | inj₁ p    = sub (∈postorderF⇒∈F p)
     ... | inj₂ refl = root
 
-    ∈postorderF⇒∈F : ∀ {u ts} → u ∈ postorderF ts → u ∈F ts
+    ∈postorderF⇒∈F : ∀ {A} {u : A} {ts} → u ∈ postorderF ts → u ∈F ts
     ∈postorderF⇒∈F {ts = t ∷ ts} u∈post with ++-match (postorder t) u∈post
     ... | inj₁ p = here (∈postorder⇒∈T p)
     ... | inj₂ p = there (∈postorderF⇒∈F p)
 
   mutual
 
-    ≼T⇒≺postorder : ∀ {u v t} → {u∈t : u ∈T t} → {v∈t : v ∈T t}
+    ≼T⇒≺postorder : ∀ {A} {u v : A} {t} → {u∈t : u ∈T t} → {v∈t : v ∈T t}
                      → u∈t ≼T v∈t
                      → ∈T⇒∈postorder u∈t ≼ ∈T⇒∈postorder v∈t
-    ≼T⇒≺postorder refl      = ≼-refl
     ≼T⇒≺postorder root      = baseʳ
     ≼T⇒≺postorder (sub u≼v) = stepʳ (≼F⇒≺postorder u≼v)
 
-    ≼F⇒≺postorder : ∀ {u v ts} → {u∈ts : u ∈F ts} → {v∈ts : v ∈F ts}
+    ≼F⇒≺postorder : ∀ {A} {u v : A} {ts} → {u∈ts : u ∈F ts} → {v∈ts : v ∈F ts}
                      → u∈ts ≼F v∈ts
                      → ∈F⇒∈postorderF u∈ts ≼ ∈F⇒∈postorderF v∈ts
     ≼F⇒≺postorder (here u≼t) = helper (≼T⇒≺postorder u≼t)
@@ -290,5 +352,5 @@ module _ (traversal : Traversal)
     = Unique≼V⇒∀≼ (reverse-Unique uniqueness)
       (reverse-≼V {xs = postorderF (traversal vs)} 
        (∈F⇒∈postorderF (∈topo⇒∈trav v∈top) , ∈F⇒∈postorderF (∈topo⇒∈trav u∈top) , 
-        ≼F⇒≺postorder (lemma vs acyclic e (∈topo⇒∈trav u∈top) (∈topo⇒∈trav v∈top))))
+        ≼F⇒≺postorder (lemma₂ vs acyclic e (∈topo⇒∈trav u∈top) (∈topo⇒∈trav v∈top))))
       u∈top v∈top
