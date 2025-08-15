@@ -254,16 +254,15 @@ module _ (traversal : Traversal)
          (completeness : ∀ {v vs} → v ∈ vs → v ∈F traversal vs)
          (soundness : ∀ {v vs} → v ∈F traversal vs → v ∈ vs)
          (TreeEdge⇒Edge : ∀ {u v vs} → TreeEdgeF (traversal vs) u v → E u v)
+         (edge-classify : (vs : List V) → {u v : V} → E u v
+                        → (u∈trav : u ∈F traversal vs)
+                        → (v∈trav : v ∈F traversal vs)
+                        → v∈trav ≼F u∈trav ⊎ descF v∈trav u∈trav)
   where
 
   -- topological sort
   topoSort : List V → List V
   topoSort = reverse ∘ postorderF ∘ traversal
-
-  lemma₁ : (vs : List V) → {u v : V} → E u v
-         → (u∈trav : u ∈F traversal vs) → (v∈trav : v ∈F traversal vs)
-         → v∈trav ≼F u∈trav ⊎ descF v∈trav u∈trav
-  lemma₁ vs e u∈trav v∈trav = {!   !}
 
   TreePathF⇒Path : ∀ {u v vs} → TreePathF (traversal vs) u v → Path u v
   TreePathF⇒Path (t , t∈ts , [] u∈t) = []
@@ -276,11 +275,11 @@ module _ (traversal : Traversal)
   TreePathF⇒⊆P (t , t∈ts , (p ▷ e)) 
     = cons (soundness (∈T⇒∈F (TreeEdge⇒dst∈T e) t∈ts)) (TreePathF⇒⊆P (t , t∈ts , p))
 
-  lemma₂ : (vs : List V) → Acyclic vs
+  lemma : (vs : List V) → Acyclic vs
         → {u v : V} → E u v
         → (u∈trav : u ∈F traversal vs) → (v∈trav : v ∈F traversal vs)
         → v∈trav ≼F u∈trav
-  lemma₂ vs acyclic e u∈trav v∈trav with lemma₁ vs e u∈trav v∈trav
+  lemma vs acyclic e u∈trav v∈trav with edge-classify vs e u∈trav v∈trav
   ... | inj₁ p = p
   ... | inj₂ p = ⊥-elim (helper (TreePathF⇒Path (descF⇒TreePathF p)) 
                                 (TreePathF⇒⊆P   (descF⇒TreePathF p)) e)
@@ -352,5 +351,5 @@ module _ (traversal : Traversal)
     = Unique≼V⇒∀≼ (reverse-Unique uniqueness)
       (reverse-≼V {xs = postorderF (traversal vs)} 
        (∈F⇒∈postorderF (∈topo⇒∈trav v∈top) , ∈F⇒∈postorderF (∈topo⇒∈trav u∈top) , 
-        ≼F⇒≺postorder (lemma₂ vs acyclic e (∈topo⇒∈trav u∈top) (∈topo⇒∈trav v∈top))))
+        ≼F⇒≺postorder (lemma vs acyclic e (∈topo⇒∈trav u∈top) (∈topo⇒∈trav v∈top))))
       u∈top v∈top
