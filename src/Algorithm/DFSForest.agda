@@ -1,77 +1,87 @@
-open import Data.Nat using (ℕ; zero; suc; _<_; s≤s)
+open import Data.Nat using (ℕ; zero; suc; _<_; _≤_; s≤s)
 open import Data.Nat.Induction renaming (<-wellFounded to ℕ-wf)
 open import Data.Nat.Properties using (≤-refl; ≤-trans)
 open import Data.List using (List; []; _∷_; length)
-open import Data.List.Relation.Binary.Sublist.Propositional using (_⊆_; []; _∷_; _∷ʳ_; ⊆-refl; ⊆-trans)
-open import Data.List.Relation.Binary.Sublist.Propositional.Properties using (length-mono-≤)
+open import Data.List.Relation.Unary.Any using (here; there)
+open import Data.List.Membership.Propositional using (_∈_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Product using (_×_; proj₁; proj₂; _,_)
 open import Data.Product.Relation.Binary.Lex.Strict using (×-Lex; ×-wellFounded)
-open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Maybe using (Maybe; just; nothing) renaming (map to mapMaybe)
+open import Data.Maybe.Properties using (just-injective)
+open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Binary using (Rel)
 open import Relation.Binary.Construct.On using (wellFounded)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
-open import Function.Base using (_on_)
-open import Induction.WellFounded using (WellFounded)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; cong; cong₂; subst)
+open import Function.Base using (_∘_; _on_)
+open import Induction.WellFounded using (WellFounded; WfRec)
 open import Level using (0ℓ)
 
 open import Data.Tree
 open import Data.Tree.Properties
+open import Data.VertexSet
 
 module Algorithm.DFSForest
-  (V : Set) (Edges : V → List V) where
+  (V : Set) (Edges : V → List V)
+  (eq? : (x y : V) → Dec (x ≡ y))
+  where
 
-record State : Set where
-    constructor state
-    field
-      vs    : List V
-      stack : List V
+open import Data.Graph V Edges
 
-state→pair : State → ℕ × ℕ
-state→pair (state vs stack) = length vs , length stack
+------------------------------------------------------------------------
+-- Definitions
 
-_<S_ : Rel State _
-_<S_ = (×-Lex _≡_ _<_ _<_) on state→pair
+_<S_ : Rel (VertexSet V) _
+_<S_ = _<_ on size
 
 <S-wf : WellFounded _<S_
-<S-wf = wellFounded state→pair (×-wellFounded ℕ-wf ℕ-wf)
+<S-wf = wellFounded size ℕ-wf
 
-module stateTraversal = Induction.WellFounded.All <S-wf 0ℓ
+open Induction.WellFounded.All <S-wf 0ℓ
 
-record Sublist {A} (L : List A) : Set where
-  constructor sublist
-  field
-    xs : List A
-    ⊆L : xs ⊆ L
+dff-step : (vs : VertexSet V)
+         → ({vs' : VertexSet V} → vs' <S vs → (List V → Forest V × Sublist vs'))
+         → (stack : List V) → Forest V × Sublist vs
+dff-step vs f []          = [] , sublist vs ⊆-refl
+dff-step vs f (v ∷ stack) with del vs v in eq
+... | just vs' = let ts₁ , (sublist vs₁ vs₁⊆vs')
+                       = f {vs'} (del-decrease vs v eq) (Edges v)
+                     ts₂ , (sublist vs₂ vs₂⊆vs₁)
+                       = f {vs₁} (≤-trans (s≤s (size-mono-≤ vs₁⊆vs')) (del-decrease vs v eq)) stack
+                 in  node v ts₁ ∷ ts₂ , sublist vs₂ (⊆-trans (⊆-trans vs₂⊆vs₁ vs₁⊆vs') (del-subset vs v eq))
+... | nothing  = dff-step vs f stack
 
-del : List V → V → Maybe (List V)
-del xs x = {!   !}
+_≗_ : ∀ {A B : Set} → (A → B) → (A → B) → Set
+f ≗ g = ∀ x → f x ≡ g x
 
-del-decrease : ∀ xs x {xs'} → del xs x ≡ just xs'
-             → length xs' < length xs
-del-decrease eq = {!   !}
+postulate
+  extensionality : ∀ {A B : Set} {f g : A → B}
+                 → f ≗ g → f ≡ g
 
-del-sublist : ∀ xs x {xs'} → del xs x ≡ just xs'
-            → xs' ⊆ xs
-del-sublist eq = {!   !}
+case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+case x of f = f x
 
-dfs-forest-util : (s : State) → Forest V × Sublist (State.vs s)
-dfs-forest-util = stateTraversal.wfRec
-                  (λ s → Forest V × Sublist (State.vs s))
-                  dfs-forest-step
-  where
-    dfs-forest-step : (s : State)
-                    → ({s' : State} → s' <S s → Forest V × Sublist (State.vs s'))
-                    → Forest V × Sublist (State.vs s)
-    dfs-forest-step (state []         stack)       f = [] , sublist [] []
-    dfs-forest-step (state vs@(_ ∷ _) [])          f = [] , sublist vs ⊆-refl
-    dfs-forest-step (state vs@(_ ∷ _) (v ∷ stack)) f with del vs v in eq
-    ... | just vs' = let ts₁ , (sublist vs₁ vs₁⊆vs')
-                           = f {state vs' (Edges v)} (inj₁ (del-decrease vs v eq))
-                         ts₂ , (sublist vs₂ vs₂⊆vs₁)
-                           = f {state vs₁ stack} (inj₁ (≤-trans (s≤s (length-mono-≤ vs₁⊆vs')) (del-decrease vs v eq)))
-                     in  node v ts₁ ∷ ts₂ , sublist vs₂ (⊆-trans (⊆-trans vs₂⊆vs₁ vs₁⊆vs') (del-sublist vs v eq))
-    ... | nothing  = f {state vs stack} (inj₂ (refl , ≤-refl))
+dff-step-ext : (vs : VertexSet V)
+               {IH IH' : {vs' : VertexSet V} → vs' <S vs → (List V → Forest V × Sublist vs')}
+             → (∀ {vs'} vs'<vs → IH {vs'} vs'<vs ≡ IH' {vs'} vs'<vs)
+             → dff-step vs IH ≡ dff-step vs IH'
+dff-step-ext vs ext = extensionality (dff-step-≗ vs ext)
+  where dff-step-≗ : (vs : VertexSet V)
+                     {IH IH' : {vs' : VertexSet V} → vs' <S vs → (List V → Forest V × Sublist vs')}
+                   → (∀ {vs'} vs'<vs → IH {vs'} vs'<vs ≡ IH' {vs'} vs'<vs)
+                   → dff-step vs IH ≗ dff-step vs IH'
+        dff-step-≗ vs ext []          = refl
+        dff-step-≗ vs ext (v ∷ stack) = {!   !}
 
-dfs-forest : List V → Forest V
-dfs-forest vs = proj₁ (dfs-forest-util (state vs vs))
+dff-util : (vs : VertexSet V) → (stack : List V) → Forest V × Sublist vs
+dff-util = wfRec
+           (λ vs → List V → Forest V × Sublist vs)
+           dff-step
+
+dff : List V → Forest V
+dff vs = proj₁ (dff-util (fromList vs) vs)
+
+open Induction.WellFounded.FixPoint <S-wf (λ vs → List V → Forest V × Sublist vs)
+                                    dff-step
+                                    dff-step-ext
+
