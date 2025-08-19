@@ -17,15 +17,10 @@ open import Data.Tree.Properties
 module Algorithm.TopoSort
   (V : Set) (Edges : V → List V) where
 
+open import Data.Graph V Edges
+
 ------------------------------------------------------------------------
 -- Definitions
-
-data E : V → V → Set where
-  edge : ∀ {u v} → v ∈ Edges u → E u v
-
-data Path : V → V → Set where
-  []   : ∀ {v}                        → Path v v
-  _▷_ : ∀ {u v w} → Path u v → E v w → Path u w
 
 -- preorder traversal
 mutual
