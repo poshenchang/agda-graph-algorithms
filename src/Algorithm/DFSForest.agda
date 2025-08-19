@@ -85,3 +85,28 @@ open Induction.WellFounded.FixPoint <S-wf (λ vs → List V → Forest V × Subl
                                     dff-step
                                     dff-step-ext
 
+------------------------------------------------------------------------
+-- Properties for depth first forest (dff-util)
+
+dff-util-completeness : ∀ {v vs stack} → v ∈S vs → v ∈ stack
+                      → v ∈F proj₁ (dff-util vs stack)
+dff-util-completeness {v} {vs} {u ∷ stack} v∈vs v∈stack = {!unfold-wfRec   !}
+
+------------------------------------------------------------------------
+-- Properties for depth first forest (dff)
+
+dff-completeness : ∀ {v vs} → v ∈ vs → v ∈F dff vs
+dff-completeness {v} {vs} v∈vs = {!   !}
+
+dff-soundness : ∀ {v vs} → v ∈F dff vs → v ∈ vs
+dff-soundness v∈dff = {!   !}
+
+dff-TreeEdge⇒Edge : ∀ {u v vs} → TreeEdgeF (dff vs) u v → E u v
+dff-TreeEdge⇒Edge e = {!   !}
+
+
+edge-classify : (vs : List V) → {u v : V} → E u v
+              → (u∈dff : u ∈F dff vs)
+              → (v∈dff : v ∈F dff vs)
+              → v∈dff ≼F u∈dff ⊎ descF v∈dff u∈dff
+edge-classify vs e u∈dff v∈dff = {!   !}
