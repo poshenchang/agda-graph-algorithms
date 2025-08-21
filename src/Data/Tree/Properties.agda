@@ -1,10 +1,11 @@
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; _∷ʳ_)
 open import Data.List.Relation.Unary.Any using (here; there)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.Product using (∃-syntax; _×_; _,_)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 open import Data.Tree
+open import Data.Tree.Operations
 
 module Data.Tree.Properties where
 
@@ -76,3 +77,42 @@ mutual
   descF⇒TreePathF (here  p) = _ , here refl , desc⇒TreePath p
   descF⇒TreePathF (there p) = let t , t∈ts , q = descF⇒TreePathF p
                                in  t , (there t∈ts) , q
+
+------------------------------------------------------------------------
+-- tree insert properties
+
+mutual
+
+  insertT-preserves∈ : ∀ {A} {v x y : A} {t} {x∈t : x ∈T t}
+               → v ∈T t
+               → v ∈T (insertT t x∈t y)
+  insertT-preserves∈ {x∈t = root}     root       = root
+  insertT-preserves∈ {x∈t = root}     (sub v∈ts) = sub (helper v∈ts)
+    where helper : ∀ {A} {v : A} {t ts} → v ∈F ts → v ∈F (ts ∷ʳ t)
+          helper (here  v∈t)  = here v∈t
+          helper (there v∈ts) = there (helper v∈ts)
+  insertT-preserves∈ {x∈t = sub x∈ts} root       = root
+  insertT-preserves∈ {x∈t = sub x∈ts} (sub v∈ts) = sub (insertF-preserves∈ v∈ts)
+
+  insertF-preserves∈ : ∀ {A} {v x y : A} {ts} {x∈ts : x ∈F ts}
+               → v ∈F ts
+               → v ∈F (insertF ts x∈ts y)
+  insertF-preserves∈ {x∈ts = here  x∈t}  (here  v∈t)  = here (insertT-preserves∈ v∈t)
+  insertF-preserves∈ {x∈ts = here  x∈t}  (there v∈ts) = there v∈ts
+  insertF-preserves∈ {x∈ts = there x∈ts} (here  v∈t)  = here v∈t
+  insertF-preserves∈ {x∈ts = there x∈ts} (there v∈ts) = there (insertF-preserves∈ v∈ts)
+
+mutual
+
+  ∈-insertT : ∀ {A} {u v : A} {t} (u∈t : u ∈T t)
+               → v ∈T (insertT t u∈t v)
+  ∈-insertT root       = sub helper
+    where helper : ∀ {A} {v : A} {ts} → v ∈F (ts ∷ʳ node v [])
+          helper {ts = []}     = here root
+          helper {ts = t ∷ ts} = there helper
+  ∈-insertT (sub u∈ts) = sub (∈-insertF u∈ts)
+
+  ∈-insertF : ∀ {A} {u v : A} {ts} (u∈ts : u ∈F ts)
+              → v ∈F (insertF ts u∈ts v)
+  ∈-insertF (here  u∈t)  = here (∈-insertT u∈t)
+  ∈-insertF (there u∈ts) = there (∈-insertF u∈ts)
