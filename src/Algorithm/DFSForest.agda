@@ -1,77 +1,92 @@
-open import Data.Nat using (ℕ; zero; suc; _<_; s≤s)
-open import Data.Nat.Induction renaming (<-wellFounded to ℕ-wf)
-open import Data.Nat.Properties using (≤-refl; ≤-trans)
-open import Data.List using (List; []; _∷_; length)
-open import Data.List.Relation.Binary.Sublist.Propositional using (_⊆_; []; _∷_; _∷ʳ_; ⊆-refl; ⊆-trans)
-open import Data.List.Relation.Binary.Sublist.Propositional.Properties using (length-mono-≤)
+open import Data.Nat using (ℕ; zero; suc)
+open import Data.List using (List; []; _∷_; _∷ʳ_; _++_; map)
+open import Data.List.Membership.Propositional using (_∈_)
+open import Data.List.Relation.Unary.Any using (here; there)
+open import Data.Vec using (Vec; []; _∷_; toList; fromList)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
-open import Data.Product using (_×_; proj₁; proj₂; _,_)
-open import Data.Product.Relation.Binary.Lex.Strict using (×-Lex; ×-wellFounded)
+open import Data.Product using (∃-syntax; _×_; _,_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Relation.Binary using (Rel)
-open import Relation.Binary.Construct.On using (wellFounded)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
-open import Function.Base using (_on_)
-open import Induction.WellFounded using (WellFounded)
-open import Level using (0ℓ)
 
 open import Data.Tree
 open import Data.Tree.Properties
+open import Data.Tree.Operations
 
 module Algorithm.DFSForest
   (V : Set) (Edges : V → List V) where
 
-record State : Set where
-    constructor state
-    field
-      vs    : List V
-      stack : List V
+open import Data.Graph V Edges
 
-state→pair : State → ℕ × ℕ
-state→pair (state vs stack) = length vs , length stack
+del : ∀ {n} → Vec V (suc n) → V → Maybe (Vec V n)
+del = {!   !}
 
-_<S_ : Rel State _
-_<S_ = (×-Lex _≡_ _<_ _<_) on state→pair
+TreeExt : (t : Tree V) → (v : V) → Set
+TreeExt t v = ∃[ u ] (u ∈T t) × (E u v)
 
-<S-wf : WellFounded _<S_
-<S-wf = wellFounded state→pair (×-wellFounded ℕ-wf ℕ-wf)
+data ForestExt : (f : Forest V) → (v : V) → Set where
+  leaf   : ∀ {f v} → ∃[ u ] (u ∈F f) × (E u v) → ForestExt f v
+  branch : ∀ {f v} → ForestExt f v
 
-module stateTraversal = Induction.WellFounded.All <S-wf 0ℓ
-
-record Sublist {A} (L : List A) : Set where
-  constructor sublist
+record ForestStack (n : ℕ) : Set where
+  constructor fStack
   field
-    xs : List A
-    ⊆L : xs ⊆ L
+    vs    : Vec V n
+    ts    : Forest V
+    stack : List (∃[ v ] ForestExt ts v)
 
-del : List V → V → Maybe (List V)
-del xs x = {!   !}
+forest-ext : ∀ (ts : Forest V) (v : V)
+             → ForestExt ts v
+             → Forest V
+forest-ext ts v (leaf (u , u∈ts , e)) = insertF ts u∈ts v
+forest-ext ts v branch                = ts ∷ʳ node v []
 
-del-decrease : ∀ xs x {xs'} → del xs x ≡ just xs'
-             → length xs' < length xs
-del-decrease eq = {!   !}
+∈-forest-ext : ∀ (ts : Forest V) (v : V)
+               → (ext : ForestExt ts v)
+               → v ∈F forest-ext ts v ext
+∈-forest-ext ts v (leaf (u , u∈ts , e)) = ∈-insertF u∈ts
+∈-forest-ext ts v branch   = helper root
+  where helper : ∀ {v : V} {t ts} → v ∈T t → v ∈F (ts ∷ʳ t)
+        helper {ts = []}     v∈t = here v∈t
+        helper {ts = x ∷ ts} v∈t = there (helper v∈t)
 
-del-sublist : ∀ xs x {xs'} → del xs x ≡ just xs'
-            → xs' ⊆ xs
-del-sublist eq = {!   !}
+ForestExt-∈ : ∀ {ts u v} (ext : ForestExt ts v)
+            → ForestExt ts u
+            → ForestExt (forest-ext ts v ext) u
+ForestExt-∈ (leaf (w , w∈ts , e)) (leaf (w' , w'∈ts , e'))
+  = leaf (w' , insertF-preserves∈ w'∈ts , e')
+ForestExt-∈ branch (leaf (w , w∈ts , e)) = leaf (w , helper w∈ts , e)
+  where helper : ∀ {v : V} {t ts} → v ∈F ts → v ∈F (ts ∷ʳ t)
+        helper (here  v∈t') = here v∈t'
+        helper (there v∈ts) = there (helper v∈ts)
+ForestExt-∈ _ branch = branch
 
-dfs-forest-util : (s : State) → Forest V × Sublist (State.vs s)
-dfs-forest-util = stateTraversal.wfRec
-                  (λ s → Forest V × Sublist (State.vs s))
-                  dfs-forest-step
-  where
-    dfs-forest-step : (s : State)
-                    → ({s' : State} → s' <S s → Forest V × Sublist (State.vs s'))
-                    → Forest V × Sublist (State.vs s)
-    dfs-forest-step (state []         stack)       f = [] , sublist [] []
-    dfs-forest-step (state vs@(_ ∷ _) [])          f = [] , sublist vs ⊆-refl
-    dfs-forest-step (state vs@(_ ∷ _) (v ∷ stack)) f with del vs v in eq
-    ... | just vs' = let ts₁ , (sublist vs₁ vs₁⊆vs')
-                           = f {state vs' (Edges v)} (inj₁ (del-decrease vs v eq))
-                         ts₂ , (sublist vs₂ vs₂⊆vs₁)
-                           = f {state vs₁ stack} (inj₁ (≤-trans (s≤s (length-mono-≤ vs₁⊆vs')) (del-decrease vs v eq)))
-                     in  node v ts₁ ∷ ts₂ , sublist vs₂ (⊆-trans (⊆-trans vs₂⊆vs₁ vs₁⊆vs') (del-sublist vs v eq))
-    ... | nothing  = f {state vs stack} (inj₂ (refl , ≤-refl))
+map-∈ : ∀ {A : Set} → (xs : List A) → List (∃[ x ] x ∈ xs)
+map-∈ []       = []
+map-∈ (x ∷ xs) = (x , here refl) ∷ map (λ { (y , y∈xs) → (y , there y∈xs) }) (map-∈ xs)
 
-dfs-forest : List V → Forest V
-dfs-forest vs = proj₁ (dfs-forest-util (state vs vs))
+edges-ext : ∀ {ts} (v : V)
+          → v ∈F ts
+          → List (∃[ u ] ForestExt ts u)
+edges-ext v v∈ts = map (λ { (u , u∈E) → u , leaf (v , v∈ts , edge u∈E) }) (map-∈ (Edges v))
+
+dff-step : {n : ℕ}
+          → Vec V (suc n) → (ts : Forest V)
+          → List (∃[ v ] ForestExt ts v)
+          → ForestStack n
+dff-step (_ ∷ vs) ts [] = fStack vs ts []
+dff-step vs ts ((v , ext) ∷ stack) with del vs v
+... | just vs' = fStack vs' (forest-ext ts v ext)
+                   (edges-ext v (∈-forest-ext ts v ext) 
+                   ++ map (λ { (u , ext') → u , ForestExt-∈ ext ext' }) stack)
+... | nothing  = dff-step vs ts stack
+
+dff-rec : {n : ℕ}
+        → ForestStack n
+        → ForestStack 0
+dff-rec {zero}  fstack               = fstack
+dff-rec {suc n} (fStack vs ts stack) = dff-rec (dff-step vs ts stack)
+
+dff : (vs : List V) → Forest V
+dff vs = ForestStack.ts
+         (dff-rec (fStack (fromList vs) [] 
+                    (map (λ v → v , branch) vs)))
