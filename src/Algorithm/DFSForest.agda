@@ -7,7 +7,7 @@ open import Data.List.Membership.Propositional using (_∈_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Product using (_×_; proj₁; proj₂; _,_)
 open import Data.Product.Relation.Binary.Lex.Strict using (×-Lex; ×-wellFounded)
-open import Data.Maybe using (Maybe; just; nothing) renaming (map to mapMaybe)
+open import Data.Maybe using (Maybe; just; nothing; maybe) renaming (map to mapMaybe)
 open import Data.Maybe.Properties using (just-injective)
 open import Relation.Nullary using (Dec; yes; no)
 open import Relation.Binary using (Rel)
@@ -43,13 +43,13 @@ dff-step : (vs : VertexSet V)
          → ({vs' : VertexSet V} → vs' <S vs → (List V → Forest V × Sublist vs'))
          → (stack : List V) → Forest V × Sublist vs
 dff-step vs f []          = [] , sublist vs ⊆-refl
-dff-step vs f (v ∷ stack) with del vs v in eq
-... | just vs' = let ts₁ , (sublist vs₁ vs₁⊆vs')
-                       = f {vs'} (del-decrease vs v eq) (Edges v)
-                     ts₂ , (sublist vs₂ vs₂⊆vs₁)
-                       = f {vs₁} (≤-trans (s≤s (size-mono-≤ vs₁⊆vs')) (del-decrease vs v eq)) stack
-                 in  node v ts₁ ∷ ts₂ , sublist vs₂ (⊆-trans (⊆-trans vs₂⊆vs₁ vs₁⊆vs') (del-subset vs v eq))
-... | nothing  = dff-step vs f stack
+dff-step vs f (v ∷ stack) = maybe {B = λ x → del vs v ≡ x → Forest V × Sublist vs} helper (λ _ → dff-step vs f stack) (del vs v) refl
+  where helper : (vs' : VertexSet V) → del vs v ≡ just vs' → Forest V × Sublist vs
+        helper vs' eq = let ts₁ , (sublist vs₁ vs₁⊆vs')
+                              = f {vs'} (del-decrease vs v eq) (Edges v)
+                            ts₂ , (sublist vs₂ vs₂⊆vs₁)
+                              = f {vs₁} (≤-trans (s≤s (size-mono-≤ vs₁⊆vs')) (del-decrease vs v eq)) stack
+                        in  node v ts₁ ∷ ts₂ , sublist vs₂ (⊆-trans (⊆-trans vs₂⊆vs₁ vs₁⊆vs') (del-subset vs v eq))
 
 _≗_ : ∀ {A B : Set} → (A → B) → (A → B) → Set
 f ≗ g = ∀ x → f x ≡ g x
@@ -90,7 +90,7 @@ open Induction.WellFounded.FixPoint <S-wf (λ vs → List V → Forest V × Subl
 
 dff-util-completeness : ∀ {v vs stack} → v ∈S vs → v ∈ stack
                       → v ∈F proj₁ (dff-util vs stack)
-dff-util-completeness {v} {vs} {u ∷ stack} v∈vs v∈stack = {!unfold-wfRec   !}
+dff-util-completeness {v} {vs} {u ∷ stack} v∈vs v∈stack = {!unfold-wfRec {vs}   !}
 
 ------------------------------------------------------------------------
 -- Properties for depth first forest (dff)
