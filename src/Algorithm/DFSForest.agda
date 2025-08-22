@@ -2,7 +2,9 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.List using (List; []; _∷_; _∷ʳ_; _++_; map)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.List.Relation.Unary.Any using (here; there)
+open import Data.List.Relation.Unary.Unique.Propositional using (Unique)
 open import Data.Vec using (Vec; []; _∷_; toList; fromList)
+open import Data.Vec.Membership.Propositional renaming (_∈_ to _∈Vec_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Product using (∃-syntax; _×_; _,_)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -16,6 +18,9 @@ module Algorithm.DFSForest
   (V : Set) (Edges : V → List V) where
 
 open import Data.Graph V Edges
+
+------------------------------------------------------------------------
+-- Definitions
 
 del : ∀ {n} → Vec V (suc n) → V → Maybe (Vec V n)
 del = {!   !}
@@ -90,3 +95,98 @@ dff : (vs : List V) → Forest V
 dff vs = ForestStack.ts
          (dff-rec (fStack (fromList vs) [] 
                     (map (λ v → v , branch) vs)))
+
+------------------------------------------------------------------------
+-- Depth-First-Forest Properties (dff)
+
+case_of_ : ∀ {A B : Set} → (x : A) → (f : A → B) → B
+case x of f = f x
+
+open import Algorithm.TopoSort V Edges
+
+-- uniqueness
+
+dff-uniqueness : ∀ {vs} → Unique (postorderF (dff vs))
+dff-uniqueness {vs} = {!   !}
+
+-- completeness
+
+dff-step-completeness : {n : ℕ}
+                      → (vs : Vec V (suc n)) → (ts : Forest V)
+                      → (stack : List (∃[ v ] ForestExt ts v))
+                      → ∀ {v} → v ∈Vec vs
+                      → v ∈Vec ForestStack.vs (dff-step vs ts stack)
+                        ⊎ v ∈F ForestStack.ts (dff-step vs ts stack)
+dff-step-completeness vs ts stack v∈vs = {!   !}
+
+dff-step-preserve-vtx : {n : ℕ}
+                      → (vs : Vec V (suc n)) → (ts : Forest V)
+                      → (stack : List (∃[ v ] ForestExt ts v))
+                      → ∀ {v} → v ∈F ts
+                      → v ∈F ForestStack.ts (dff-step vs ts stack)
+dff-step-preserve-vtx vs ts stack v∈ts = {!   !}
+
+dff-rec-preserve-vtx : {n : ℕ}
+                      → (fstack : ForestStack n)
+                      → ∀ {v} → v ∈F ForestStack.ts fstack
+                      → v ∈F ForestStack.ts (dff-rec fstack)
+dff-rec-preserve-vtx {zero}  fstack v∈ts = v∈ts
+dff-rec-preserve-vtx {suc n} (fStack vs ts stack) v∈ts
+  = dff-rec-preserve-vtx (dff-step vs ts stack)
+    (dff-step-preserve-vtx vs ts stack v∈ts)
+
+dff-rec-completeness : {n : ℕ}
+                      → (fstack : ForestStack n)
+                      → ∀ {v} → v ∈Vec ForestStack.vs fstack
+                      → v ∈F ForestStack.ts (dff-rec fstack)
+dff-rec-completeness {suc n} (fStack vs ts stack) v∈vs with dff-step-completeness vs ts stack v∈vs
+... | inj₁ v∈vs' = dff-rec-completeness (dff-step vs ts stack) v∈vs'
+... | inj₂ v∈ts' = dff-rec-preserve-vtx (fStack vs ts stack) {! v∈ts'  !}
+
+dff-completeness : ∀ {v vs} → v ∈ vs → v ∈F dff vs
+dff-completeness v∈vs = {!   !}
+
+--soundness
+
+dff-soundness : ∀ {v vs} → v ∈F dff vs → v ∈ vs
+dff-soundness v∈dff = {!   !}
+
+-- edge preserving
+
+PreservesEdges : Forest V → Set
+PreservesEdges ts = ∀ {u v} → TreeEdgeF ts u v → E u v
+
+dff-step-TreeEdge⇒Edge : {n : ℕ}
+                        → (vs : Vec V (suc n)) → (ts : Forest V)
+                        → (stack : List (∃[ v ] ForestExt ts v))
+                        → PreservesEdges ts
+                        → PreservesEdges (ForestStack.ts (dff-step vs ts stack))
+dff-step-TreeEdge⇒Edge (_ ∷ vs) ts [] preserves-ts = preserves-ts
+dff-step-TreeEdge⇒Edge vs ts ((v , ext) ∷ stack) preserves-ts te
+  = case del vs v of
+    λ { (just vs') → dff-step-TreeEdge⇒Edge vs ts stack preserves-ts {!   !}
+      ; nothing    → {!   !}
+      }
+
+dff-rec-TreeEdge⇒Edge : {n : ℕ}
+                        → (fstack : ForestStack n)
+                        → PreservesEdges (ForestStack.ts fstack)
+                        → PreservesEdges (ForestStack.ts (dff-rec fstack))
+dff-rec-TreeEdge⇒Edge {zero}  fstack preserves-ts = preserves-ts
+dff-rec-TreeEdge⇒Edge {suc n} (fStack vs ts stack) preserves-ts
+  = dff-rec-TreeEdge⇒Edge (dff-step vs ts stack)
+    (dff-step-TreeEdge⇒Edge vs ts stack preserves-ts)
+
+dff-TreeEdge⇒Edge : ∀ {vs} → PreservesEdges (dff vs)
+dff-TreeEdge⇒Edge {vs}
+  = dff-rec-TreeEdge⇒Edge
+    (fStack (fromList vs) [] (map (λ v → v , branch) vs))
+    λ { () }
+
+-- edge classification
+
+dff-edge-classify : (vs : List V) → {u v : V} → E u v
+              → (u∈dff : u ∈F dff vs)
+              → (v∈dff : v ∈F dff vs)
+              → v∈dff ≼F u∈dff ⊎ descF v∈dff u∈dff
+dff-edge-classify vs e u∈dff v∈dff = {!   !}
