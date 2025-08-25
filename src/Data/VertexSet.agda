@@ -2,6 +2,7 @@
 
 open import Data.Nat using (ℕ; zero; suc; _<_; _≤_)
 open import Data.List using (List; []; _∷_)
+open import Data.Sum using (_⊎_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 
@@ -52,3 +53,8 @@ size-mono-≤ us⊆vs = {!   !}
 
 ⊆-trans : ∀ {A} {vs₁ vs₂ vs₃ : VertexSet A} → vs₁ ⊆ vs₂ → vs₂ ⊆ vs₃ → vs₁ ⊆ vs₃
 ⊆-trans ⊆vs₁₂ ⊆vs₂₃ = {!   !}
+
+del-preserve : ∀ {A} {vs vs' : VertexSet A} {u v : A}
+               → u ∈S vs → del vs v ≡ just vs'
+               → u ≡ v ⊎ u ∈S vs'
+del-preserve u∈vs eq = {!   !}
