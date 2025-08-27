@@ -2,6 +2,7 @@ open import Data.List using (List; []; _∷_; _∷ʳ_)
 open import Data.List.Relation.Unary.Any using (here; there)
 open import Data.List.Membership.Propositional using (_∈_)
 open import Data.Product using (∃-syntax; _×_; _,_)
+open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 open import Data.Tree
@@ -20,6 +21,14 @@ module Data.Tree.Properties where
 ∈F⇒∈T (here  u∈t)  = _ , here refl , u∈t
 ∈F⇒∈T (there u∈ts) = let t , t∈ts , u∈t = ∈F⇒∈T u∈ts
                       in  t , there t∈ts , u∈t
+
+∈F-head : ∀ {A} {v : A} {t ts}
+        → v ∈F (ts ∷ʳ t) → v ∈F ts ⊎ v ∈T t
+∈F-head {ts = []}      (here  p) = inj₂ p
+∈F-head {ts = t' ∷ ts} (here  p) = inj₁ (here p)
+∈F-head {ts = t' ∷ ts} (there p) with ∈F-head p
+... | inj₁ q = inj₁ (there q)
+... | inj₂ q = inj₂ q
 
 TreeEdge⇒src∈T : ∀ {A} {t} {u v : A} → TreeEdge t u v → u ∈T t
 TreeEdge⇒src∈T (root u∈t)   = root
@@ -116,3 +125,29 @@ mutual
               → v ∈F (insertF ts u∈ts v)
   ∈-insertF (here  u∈t)  = here (∈-insertT u∈t)
   ∈-insertF (there u∈ts) = there (∈-insertF u∈ts)
+
+mutual
+
+  insertT-retrace : ∀ {A} {u v w : A} {t} (u∈t : u ∈T t)
+                  → w ∈T (insertT t u∈t v)
+                  → w ≡ v ⊎ w ∈T t
+  insertT-retrace root       root    = inj₂ root
+  insertT-retrace root       (sub p) with ∈F-head p
+  ... | inj₁ w∈ts = inj₂ (sub w∈ts)
+  ... | inj₂ root = inj₁ refl
+  insertT-retrace (sub u∈ts) root    = inj₂ root
+  insertT-retrace (sub u∈ts) (sub p) with insertF-retrace u∈ts p
+  ... | inj₁ eq   = inj₁ eq
+  ... | inj₂ w∈ts = inj₂ (sub w∈ts)
+
+  insertF-retrace : ∀ {A} {u v w : A} {ts} (u∈ts : u ∈F ts)
+                  → w ∈F (insertF ts u∈ts v)
+                  → w ≡ v ⊎ w ∈F ts
+  insertF-retrace (here  u∈t)  (here  w∈t) with insertT-retrace u∈t w∈t
+  ... | inj₁ eq  = inj₁ eq
+  ... | inj₂ w∈t = inj₂ (here w∈t)
+  insertF-retrace (here  u∈t)  (there w∈ts) = inj₂ (there w∈ts)
+  insertF-retrace (there u∈ts) (here  w∈t)  = inj₂ (here w∈t)
+  insertF-retrace (there u∈ts) (there w∈ts) with insertF-retrace u∈ts w∈ts
+  ... | inj₁ eq   = inj₁ eq
+  ... | inj₂ w∈ts = inj₂ (there w∈ts)
