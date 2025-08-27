@@ -9,7 +9,7 @@ open import Data.Vec.Relation.Unary.Any using (here; there)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Product using (∃-syntax; _×_; _,_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; subst)
 
 open import Data.Tree
 open import Data.Tree.Properties
@@ -31,11 +31,24 @@ del-preserve : ∀ {u n} (v : V) (vs : Vec V (suc n)) {vs'}
                → u ≡ v ⊎ u ∈Vec vs'
 del-preserve v vs u∈vs eq = {!   !}
 
+del-exist : ∀ {n} (v : V) (vs : Vec V (suc n)) {vs'}
+            → del vs v ≡ just vs' → v ∈Vec vs
+del-exist v vs eq = {!   !}
+
+del-inclusion : ∀ {u n} (v : V) (vs : Vec V (suc n)) {vs'}
+                → del vs v ≡ just vs'
+                → u ∈Vec vs' → u ∈Vec vs
+del-inclusion v vs eq u∈vs' = {!   !}
+
 ------------------------------------------------------------------------
 -- Definitions
 
+-- tree extension
+
 TreeExt : (t : Tree V) → (v : V) → Set
 TreeExt t v = ∃[ u ] (u ∈T t) × (E u v)
+
+-- forest extension
 
 data ForestExt : (f : Forest V) → (v : V) → Set where
   leaf   : ∀ {f v} → ∃[ u ] (u ∈F f) × (E u v) → ForestExt f v
@@ -74,6 +87,16 @@ ForestExt-∈ branch (leaf (w , w∈ts , e)) = leaf (w , helper w∈ts , e)
         helper (here  v∈t') = here v∈t'
         helper (there v∈ts) = there (helper v∈ts)
 
+forest-ext-retrace : ∀ {u v ts} → (ext : ForestExt ts v)
+                     → u ∈F forest-ext ts v ext
+                     → u ≡ v ⊎ u ∈F ts
+forest-ext-retrace (leaf x) u∈forest-ext = insertF-retrace _ u∈forest-ext
+forest-ext-retrace {ts = []}     branch (here root)  = inj₁ refl
+forest-ext-retrace {ts = t ∷ ts} branch (here u∈t)   = inj₂ (here u∈t)
+forest-ext-retrace {ts = t ∷ ts} branch (there u∈ts) with forest-ext-retrace branch u∈ts
+... | inj₁ refl = inj₁ refl
+... | inj₂ p    = inj₂ (there p)
+
 map-∈ : ∀ {A : Set} → (xs : List A) → List (∃[ x ] x ∈ xs)
 map-∈ []       = []
 map-∈ (x ∷ xs) = (x , here refl) ∷ map (λ { (y , y∈xs) → (y , there y∈xs) }) (map-∈ xs)
@@ -82,6 +105,8 @@ edges-ext : ∀ {ts} (v : V)
           → v ∈F ts
           → List (∃[ u ] ForestExt ts u)
 edges-ext v v∈ts = map (λ { (u , u∈E) → u , leaf (v , v∈ts , edge u∈E) }) (map-∈ (Edges v))
+
+-- depth first forest implementation
 
 dff-step : {n : ℕ}
           → Vec V (suc n) → (ts : Forest V)
@@ -100,10 +125,13 @@ dff-rec : {n : ℕ}
 dff-rec {zero}  fstack               = fstack
 dff-rec {suc n} (fStack vs ts stack) = dff-rec (dff-step vs ts stack)
 
+init-ext : V → ∃[ v ] ForestExt [] v
+init-ext v = (v , branch)
+
 dff : (vs : List V) → Forest V
 dff vs = ForestStack.ts
          (dff-rec (fStack (fromList vs) [] 
-                    (map (λ v → v , branch) vs)))
+                    (map init-ext vs)))
 
 ------------------------------------------------------------------------
 -- Auxiliary functions
@@ -111,6 +139,16 @@ dff vs = ForestStack.ts
 ∈F-∷ʳ : ∀ {A} {u : A} {t ts} → u ∈F ts → u ∈F (ts ∷ʳ t)
 ∈F-∷ʳ {ts = t' ∷ ts} (here  u∈t') = here u∈t'
 ∈F-∷ʳ {ts = t' ∷ ts} (there u∈ts) = there (∈F-∷ʳ u∈ts)
+
+∈⇒∈fromList : ∀ {A : Set} {v : A} {vs}
+             → v ∈ vs → v ∈Vec fromList vs
+∈⇒∈fromList {vs = x ∷ vs} (here  refl) = here refl
+∈⇒∈fromList {vs = x ∷ vs} (there v∈vs) = there (∈⇒∈fromList v∈vs)
+
+∈fromList⇒∈ : ∀ {A : Set} {v : A} {vs}
+             → v ∈Vec fromList vs → v ∈ vs
+∈fromList⇒∈ {vs = x ∷ vs} (here  refl) = here refl
+∈fromList⇒∈ {vs = x ∷ vs} (there v∈vs) = there (∈fromList⇒∈ v∈vs)
 
 ------------------------------------------------------------------------
 -- Depth-First-Forest Properties (dff)
@@ -122,27 +160,27 @@ open import Algorithm.TopoSort V Edges
 
 -- uniqueness
 
-dff-uniqueness : ∀ {vs} → Unique (postorderF (dff vs))
-dff-uniqueness {vs} = {!   !}
+dff-uniqueness : ∀ {vs} → Unique vs → Unique (postorderF (dff vs))
+dff-uniqueness {vs} unique-vs = {!   !}
 
 -- completeness
 
-forest-ext-preserve-vtx : {ts : Forest V} {v : V}
-                        → (ext : ForestExt ts v)
-                        → ∀ {u} → u ∈F ts
-                        → u ∈F forest-ext ts v ext
-forest-ext-preserve-vtx (leaf (v , v∈ts , e)) u∈ts = insertF-preserves∈ u∈ts
-forest-ext-preserve-vtx branch                u∈ts = ∈F-∷ʳ u∈ts
+forest-ext-preserve-ts : {ts : Forest V} {v : V}
+                       → (ext : ForestExt ts v)
+                       → ∀ {u} → u ∈F ts
+                       → u ∈F forest-ext ts v ext
+forest-ext-preserve-ts (leaf (v , v∈ts , e)) u∈ts = insertF-preserves∈ u∈ts
+forest-ext-preserve-ts branch                u∈ts = ∈F-∷ʳ u∈ts
 
-dff-step-preserve-vtx : {n : ℕ}
-                      → (vs : Vec V (suc n)) → (ts : Forest V)
-                      → (stack : List (∃[ v ] ForestExt ts v))
-                      → ∀ {v} → v ∈F ts
-                      → v ∈F ForestStack.ts (dff-step vs ts stack)
-dff-step-preserve-vtx vs ts ((v , ext) ∷ stack) v∈ts with del vs v
-... | just vs' = forest-ext-preserve-vtx ext v∈ts
-... | nothing  = dff-step-preserve-vtx vs ts stack v∈ts
-dff-step-preserve-vtx (v ∷ vs) ts [] v∈ts = ∈F-∷ʳ v∈ts
+dff-step-preserve-ts : {n : ℕ}
+                     → (vs : Vec V (suc n)) → (ts : Forest V)
+                     → (stack : List (∃[ v ] ForestExt ts v))
+                     → ∀ {v} → v ∈F ts
+                     → v ∈F ForestStack.ts (dff-step vs ts stack)
+dff-step-preserve-ts vs ts ((v , ext) ∷ stack) v∈ts with del vs v
+... | just vs' = forest-ext-preserve-ts ext v∈ts
+... | nothing  = dff-step-preserve-ts vs ts stack v∈ts
+dff-step-preserve-ts (v ∷ vs) ts [] v∈ts = ∈F-∷ʳ v∈ts
 
 dff-step-completeness : {n : ℕ}
                       → (vs : Vec V (suc n)) → (ts : Forest V)
@@ -161,38 +199,72 @@ dff-step-completeness (v ∷ vs) ts [] (here  refl) = inj₂ (helper root)
         helper {ts = x ∷ ts} v∈t = there (helper v∈t)
 dff-step-completeness (v ∷ vs) ts [] (there v∈vs) = inj₁ v∈vs
 
-dff-rec-preserve-vtx : {n : ℕ}
-                      → (fstack : ForestStack n)
-                      → ∀ {v} → v ∈F ForestStack.ts fstack
-                      → v ∈F ForestStack.ts (dff-rec fstack)
-dff-rec-preserve-vtx {zero}  fstack v∈ts = v∈ts
-dff-rec-preserve-vtx {suc n} (fStack vs ts stack) v∈ts
-  = dff-rec-preserve-vtx (dff-step vs ts stack)
-    (dff-step-preserve-vtx vs ts stack v∈ts)
+dff-rec-preserve-ts : {n : ℕ}
+                    → (fstack : ForestStack n)
+                    → ∀ {v} → v ∈F ForestStack.ts fstack
+                    → v ∈F ForestStack.ts (dff-rec fstack)
+dff-rec-preserve-ts {zero}  fstack v∈ts = v∈ts
+dff-rec-preserve-ts {suc n} (fStack vs ts stack) v∈ts
+  = dff-rec-preserve-ts (dff-step vs ts stack)
+    (dff-step-preserve-ts vs ts stack v∈ts)
 
 dff-rec-completeness : {n : ℕ}
-                      → (fstack : ForestStack n)
-                      → ∀ {v} → v ∈Vec ForestStack.vs fstack
-                      → v ∈F ForestStack.ts (dff-rec fstack)
+                     → (fstack : ForestStack n)
+                     → ∀ {v} → v ∈Vec ForestStack.vs fstack
+                     → v ∈F ForestStack.ts (dff-rec fstack)
 dff-rec-completeness {suc n} (fStack vs ts stack) v∈vs with dff-step-completeness vs ts stack v∈vs
 ... | inj₁ v∈vs' = dff-rec-completeness (dff-step vs ts stack) v∈vs'
-... | inj₂ v∈ts' = dff-rec-preserve-vtx (dff-step vs ts stack) v∈ts'
-
-fromList-∈ : ∀ {A : Set} {v : A} {vs}
-           → v ∈ vs → v ∈Vec fromList vs
-fromList-∈ {vs = x ∷ vs} (here  refl) = here refl
-fromList-∈ {vs = x ∷ vs} (there v∈vs) = there (fromList-∈ v∈vs)
+... | inj₂ v∈ts' = dff-rec-preserve-ts (dff-step vs ts stack) v∈ts'
 
 dff-completeness : ∀ {v vs} → v ∈ vs → v ∈F dff vs
 dff-completeness {vs = vs} v∈vs
   = dff-rec-completeness
     (fStack (fromList vs) [] (map (λ v → v , branch) vs))
-    (fromList-∈ v∈vs)
+    (∈⇒∈fromList v∈vs)
 
 --soundness
 
+dff-step-preserve-vs : {n : ℕ}
+                     → (vs : Vec V (suc n)) → (ts : Forest V)
+                     → (stack : List (∃[ v ] ForestExt ts v))
+                     → ∀ {v} → v ∈Vec ForestStack.vs (dff-step vs ts stack)
+                     → v ∈Vec vs
+dff-step-preserve-vs vs ts ((v , ext) ∷ stack) v∈dff-step with del vs v in eq
+... | just vs' = del-inclusion v vs eq v∈dff-step 
+... | nothing  = dff-step-preserve-vs vs ts stack v∈dff-step
+dff-step-preserve-vs (v ∷ vs) ts [] v∈dff-step = there v∈dff-step
+
+dff-step-soundness : {n : ℕ}
+                   → (vs : Vec V (suc n)) → (ts : Forest V)
+                   → (stack : List (∃[ v ] ForestExt ts v))
+                   → ∀ {v} → v ∈F ForestStack.ts (dff-step vs ts stack)
+                   → v ∈Vec vs ⊎ v ∈F ts
+dff-step-soundness vs ts ((v , ext) ∷ stack) v∈dff-step with del vs v in eq
+... | nothing  = dff-step-soundness vs ts stack v∈dff-step
+... | just vs' with forest-ext-retrace ext v∈dff-step
+...   | inj₁ p    = inj₁ (subst (_∈Vec vs) (sym p) (del-exist v vs eq))
+...   | inj₂ u∈ts = inj₂ u∈ts
+dff-step-soundness (v ∷ vs) ts [] v∈dff-step with ∈F-head v∈dff-step
+... | inj₁ p    = inj₂ p
+... | inj₂ root = inj₁ (here refl)
+
+dff-rec-soundness : {n : ℕ}
+                  → (fstack : ForestStack n)
+                  → ∀ {v} → v ∈F ForestStack.ts (dff-rec fstack)
+                  → v ∈Vec ForestStack.vs fstack
+                    ⊎ v ∈F ForestStack.ts fstack
+dff-rec-soundness {zero}  fstack               v∈dff-rec = inj₂ v∈dff-rec
+dff-rec-soundness {suc n} (fStack vs ts stack) v∈dff-rec
+  with dff-rec-soundness (dff-step vs ts stack) v∈dff-rec
+... | inj₁ v∈vs = inj₁ (dff-step-preserve-vs vs ts stack v∈vs)
+... | inj₂ v∈ts = dff-step-soundness vs ts stack v∈ts
+
 dff-soundness : ∀ {v vs} → v ∈F dff vs → v ∈ vs
-dff-soundness v∈dff = {!   !}
+dff-soundness {v} {vs} v∈dff with dff-rec-soundness
+                             (fStack (fromList vs) [] (map init-ext vs))
+                             v∈dff
+... | inj₁ v∈vs = ∈fromList⇒∈ v∈vs
+... | inj₂ ()
 
 -- edge preserving
 
@@ -263,7 +335,7 @@ dff-step-TreeEdge⇒Edge : {n : ℕ}
 dff-step-TreeEdge⇒Edge vs ts ((v , ext) ∷ stack) preserves-ts with del vs v
 ... | just vs' = forest-ext-preserve-edges ext preserves-ts
 ... | nothing  = dff-step-TreeEdge⇒Edge vs ts stack preserves-ts
-dff-step-TreeEdge⇒Edge (_ ∷ vs) ts [] preserves-ts = {! helper  !}
+dff-step-TreeEdge⇒Edge (_ ∷ vs) ts [] preserves-ts = helper preserves-ts
   where helper : ∀ {u ts} → PreservesEdgesF ts → PreservesEdgesF (ts ∷ʳ node u [])
         helper {ts = []} f (.(node _ []) , here refl , root ())
         helper {ts = []} f (.(node _ []) , here refl , sub e ())
@@ -289,7 +361,7 @@ dff-TreeEdge⇒Edge {vs}
 -- edge classification
 
 dff-edge-classify : (vs : List V) → {u v : V} → E u v
-              → (u∈dff : u ∈F dff vs)
-              → (v∈dff : v ∈F dff vs)
-              → v∈dff ≼F u∈dff ⊎ descF v∈dff u∈dff
+                  → (u∈dff : u ∈F dff vs)
+                  → (v∈dff : v ∈F dff vs)
+                  → v∈dff ≼F u∈dff ⊎ descF v∈dff u∈dff
 dff-edge-classify vs e u∈dff v∈dff = {!   !}
